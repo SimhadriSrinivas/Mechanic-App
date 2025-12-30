@@ -1,8 +1,9 @@
 // src/server.js
-const http = require('http');
-const app = require('./app');
-const config = require('./config');
-const { info } = require('./utils/logger');
+
+const http = require("http");
+const app = require("./app");
+const config = require("./config");
+const { info } = require("./utils/logger");
 
 const PORT = config.port || 3000;
 

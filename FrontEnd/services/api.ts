@@ -1,51 +1,114 @@
-// src/services/api.ts
-import { Platform } from "react-native";
+// services/api.ts
+// Base API layer – works with ngrok / production backend
 
-/// Choose correct backend URL based on platform
-// - Android emulator: 10.0.2.2 = your PC's localhost
-// - iOS simulator / web: localhost
-const BACKEND_URL =
-  Platform.OS === "android"
-    ? "http://10.0.2.2:3000"
-    : "http://localhost:3000";
+const BACKEND_URL = "https://pluviometric-heliaean-myla.ngrok-free.dev";
 
 console.log("BACKEND_URL =", BACKEND_URL);
 
-type SendOtpResponse = {
-  ok?: boolean;
-  message?: string;
-};
+/* ================= TYPES ================= */
 
-type VerifyOtpResponse = {
+export type ApiResponse<T = any> = {
   ok?: boolean;
   message?: string;
-  user?: any;
   reason?: string;
+  data?: T;
+  role?: "user" | "mechanic";
+  profile?: any;
 };
 
-async function request<T>(path: string, body: unknown): Promise<T> {
+/* ================= CORE REQUESTS ================= */
+
+async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 
-  const json = (await res.json()) as T;
+  const json = await res.json();
 
   if (!res.ok) {
-    throw new Error((json as any).message || "Request failed");
+    throw new Error(json?.message || json?.reason || "Request failed");
   }
 
-  return json;
+  return json as T;
 }
 
-export function sendOtp(phone: string): Promise<SendOtpResponse> {
-  return request<SendOtpResponse>("/api/auth/send-otp", { phone });
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(json?.message || "Request failed");
+  }
+
+  return json as T;
+}
+
+/* ================= AUTH ================= */
+
+export function sendOtp(phone: string) {
+  return post<ApiResponse>("/api/auth/send-otp", { phone });
 }
 
 export function verifyOtp(
   phone: string,
-  otp: string
-): Promise<VerifyOtpResponse> {
-  return request<VerifyOtpResponse>("/api/auth/verify-otp", { phone, otp });
+  otp: string,
+  role: "user" | "mechanic"
+) {
+  return post<ApiResponse>("/api/auth/verify-otp", {
+    phone,
+    otp,
+    role,
+  });
+}
+
+/* ================= MECHANIC ================= */
+
+export function registerMechanic(data: {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  serviceTypes: string[];
+  roles?: string[];
+  vehicleTypes?: string[];
+  address: string;
+  aadhaar: string;
+  latitude: number;
+  longitude: number;
+}) {
+  return post<ApiResponse>("/api/mechanic/register", data);
+}
+
+/* ================= SERVICE REQUESTS ================= */
+
+export function createServiceRequest(data: {
+  userPhone: string;
+  mechanicPhone: string;
+  userLat: number;
+  userLng: number;
+  mechanicLat?: number;
+  mechanicLng?: number;
+}) {
+  return post<ApiResponse>("/api/service/request", data);
+}
+
+export function getUserHistory(phone: string) {
+  return get<ApiResponse>(
+    `/api/service/user-history?phone=${encodeURIComponent(phone)}`
+  );
+}
+
+export function getMechanicHistory(phone: string) {
+  return get<ApiResponse>(
+    `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`
+  );
 }

@@ -1,56 +1,112 @@
 // src/controllers/auth.controller.js
-const { sendSms } = require('../services/twilio.service');
-const { createOtp, verifyOtp } = require('../services/otp.service');
-const { saveUserByPhone } = require('../services/appwrite.service'); // ✅ correct
-const rateLimiter = require('../utils/rateLimiter');
-const { info } = require('../utils/logger');
 
+const { sendSms } = require("../services/twilio.service");
+const { createOtp, verifyOtp } = require("../services/otp.service");
+const {
+  saveUserLogin,
+  saveMechanicLogin,
+} = require("../services/appwrite.service");
+const rateLimiter = require("../utils/rateLimiter");
+const { info, error } = require("../utils/logger");
+
+/* ====================================================
+   SEND OTP
+   ==================================================== */
 
 async function sendOtpHandler(req, res) {
   try {
-    // ensure body parser is enabled (express.json)
-    const phone = req.body && req.body.phone;
-    if (!phone) return res.status(400).json({ message: 'phone is required in body (E.164), e.g. +919000258071' });
+    const phone = req.body?.phone;
 
-    // basic rate-limit per IP (and you can add per-phone)
-    try {
-      await rateLimiter.consume(req.ip);
-    } catch (rlRejected) {
-      return res.status(429).json({ message: 'Too many requests. Slow down.' });
+    if (!phone) {
+      return res.status(400).json({
+        message: "phone is required in E.164 format (ex: +919876543210)",
+      });
     }
 
-    // create OTP and send via Twilio
+    //  Rate limit per IP
+    try {
+      await rateLimiter.consume(req.ip);
+    } catch {
+      return res.status(429).json({
+        message: "Too many requests. Please try again later.",
+      });
+    }
+
+    //  Generate OTP
     const code = createOtp(phone);
-    const text = `Your MEC app OTP is: ${code}. It will expire in ${process.env.OTP_EXPIRY_MINUTES || 5} minutes.`;
+
+    //  Send SMS
+    const text = `Your MEC App OTP is ${code}. It expires in ${
+      process.env.OTP_EXPIRY_MINUTES || 5
+    } minutes.`;
+
     await sendSms(phone, text);
 
-    return res.json({ ok: true, message: 'OTP sent' });
+    info("OTP sent to", phone);
+
+    return res.json({ ok: true, message: "OTP sent" });
   } catch (err) {
-    console.error('sendOtpHandler error', err);
-    return res.status(500).json({ message: 'Server error', detail: err.message || String(err) });
+    error("sendOtpHandler:", err.message);
+    return res.status(500).json({ message: "Server error" });
   }
 }
+
+/* ====================================================
+   VERIFY OTP (ROLE BASED)
+   ==================================================== */
 
 async function verifyOtpHandler(req, res) {
   try {
-    const phone = req.body && req.body.phone;
-    const otp = req.body && req.body.otp;
-    if (!phone || !otp) return res.status(400).json({ message: 'phone and otp are required in body' });
+    const phone = req.body?.phone;
+    const otp = req.body?.otp;
+    const role = req.body?.role; //  IMPORTANT
 
-    const result = verifyOtp(phone, String(otp));
-    if (!result.ok) {
-      return res.status(400).json({ ok: false, reason: result.reason });
+    if (!phone || !otp || !role) {
+      return res.status(400).json({
+        message: "phone, otp and role are required",
+      });
     }
 
-    // optional: save user to Appwrite and return doc
-    const doc = await saveUserByPhone(phone);
+    if (!["user", "mechanic"].includes(role)) {
+      return res.status(400).json({
+        message: "Invalid role",
+      });
+    }
 
-    // success response (you may create a JWT here for client)
-    return res.json({ ok: true, message: 'OTP verified', user: doc || { phone } });
+    //  Verify OTP
+    const result = verifyOtp(phone, String(otp));
+
+    if (!result.ok) {
+      return res.status(400).json({
+        ok: false,
+        reason: result.reason,
+      });
+    }
+
+    //  ROLE BASED SAVE
+    let profile = null;
+
+    if (role === "user") {
+      profile = await saveUserLogin(phone);
+    }
+
+    if (role === "mechanic") {
+      profile = await saveMechanicLogin(phone);
+    }
+
+    return res.json({
+      ok: true,
+      message: "OTP verified",
+      role,
+      profile: profile || { phone },
+    });
   } catch (err) {
-    console.error('verifyOtpHandler error', err);
-    return res.status(500).json({ message: 'Server error', detail: err.message || String(err) });
+    error("verifyOtpHandler:", err.message);
+    return res.status(500).json({ message: "Server error" });
   }
 }
 
-module.exports = { sendOtpHandler, verifyOtpHandler };
+module.exports = {
+  sendOtpHandler,
+  verifyOtpHandler,
+};

@@ -1,28 +1,37 @@
 // src/app.js
-const express = require('express');
-const helmet = require('helmet');
-const cors = require('cors');
-const bodyParser = require('body-parser'); // optional, express.json is fine
-const authRoutes = require('./routes/auth.routes');
-const { info } = require('./utils/logger');
+
+const express = require("express");
+const helmet = require("helmet");
+const cors = require("cors");
+
+const authRoutes = require("./routes/auth.routes");
+const mechanicRoutes = require("./routes/mechanic.routes");
+const serviceRoutes = require("./routes/service.routes"); // NEW
 
 const app = express();
 
-// Security & parsing middleware
+// ================= MIDDLEWARE =================
+
 app.use(helmet());
-app.use(cors()); // configure origin in production
-app.use(express.json()); // parses application/json
-app.use(bodyParser.urlencoded({ extended: true })); // parse form data if needed
+app.use(cors()); // Configure origin in production
+app.use(express.json());
 
-// simple health check
-app.get('/', (req, res) => res.send('OTP server alive'));
+// ================= HEALTH CHECK =================
 
-// mount routes with prefix
-app.use('/api/auth', authRoutes);
+app.get("/", (req, res) => {
+  res.send("MEC backend server is running");
+});
 
-// 404 handler
+// ================= ROUTES =================
+
+app.use("/api/auth", authRoutes);
+app.use("/api/mechanic", mechanicRoutes);
+app.use("/api/service", serviceRoutes); // NEW
+
+// ================= 404 HANDLER =================
+
 app.use((req, res) => {
-  res.status(404).json({ message: 'Not Found' });
+  res.status(404).json({ message: "Route not found" });
 });
 
 module.exports = app;

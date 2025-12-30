@@ -1,65 +1,198 @@
 // src/services/appwrite.service.js
-const sdk = require('node-appwrite');
-const config = require('../config');
-const { info, error } = require('../utils/logger');
+
+const { Client, Databases, Query, ID } = require("node-appwrite");
+const config = require("../config");
+const { info, error } = require("../utils/logger");
 
 let client = null;
 let databases = null;
 
-if (config.appwrite.endpoint && config.appwrite.apiKey && config.appwrite.projectId) {
-  client = new sdk.Client()
+/* ================= APPWRITE CLIENT ================= */
+
+if (
+  config.appwrite.endpoint &&
+  config.appwrite.projectId &&
+  config.appwrite.apiKey
+) {
+  client = new Client()
     .setEndpoint(config.appwrite.endpoint)
     .setProject(config.appwrite.projectId)
     .setKey(config.appwrite.apiKey);
 
-  databases = new sdk.Databases(client);
+  databases = new Databases(client);
+
+  info("Appwrite connected");
 }
 
-/**
- * saveUserByPhone
- * - If a document with this phone already exists, return that document.
- * - Otherwise, create a new document with { phone, tries: 0 }.
- */
-async function saveUserByPhone(phone) {
-  if (!databases) {
-    info('Appwrite not configured - skipping saveUserByPhone');
-    return null;
-  }
+/* ====================================================
+   USER LOGIN (OTP_DATABASE)
+   ==================================================== */
+
+async function saveUserLogin(phone) {
+  if (!databases) return null;
 
   try {
-    // 1) Check if user already exists (phone is unique or indexed)
     const existing = await databases.listDocuments(
       config.appwrite.databaseId,
-      config.appwrite.collectionId,
-      [sdk.Query.equal('phone', phone)]  // filter by phone
+      config.appwrite.otpCollectionId,
+      [Query.equal("phone", phone)]
     );
 
     if (existing.total > 0) {
-      const doc = existing.documents[0];
-      info('User already exists in Appwrite, returning existing doc:', doc.$id);
-      return doc; // ✅ no new record
+      return existing.documents[0];
     }
 
-    // 2) If not found, create a new user document
-    const docId = sdk.ID.unique();
-    const data = {
-      phone,        // required string
-      tries: 0      // integer, default 0
-    };
-
-    const doc = await databases.createDocument(
+    return await databases.createDocument(
       config.appwrite.databaseId,
-      config.appwrite.collectionId,
-      docId,
-      data
+      config.appwrite.otpCollectionId,
+      ID.unique(),
+      {
+        phone,
+        tries: 0,
+      }
     );
-
-    info('Created new user in Appwrite:', doc.$id);
-    return doc;
   } catch (err) {
-    error('Appwrite saveUserByPhone error:', err.message || err);
+    error("saveUserLogin:", err.message);
     return null;
   }
 }
 
-module.exports = { saveUserByPhone };
+/**
+ * Update user profile (name, email)
+ */
+async function updateUserProfile(phone, data) {
+  if (!databases) return null;
+
+  try {
+    const res = await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.otpCollectionId,
+      [Query.equal("phone", phone)]
+    );
+
+    if (res.total === 0) return null;
+
+    return await databases.updateDocument(
+      config.appwrite.databaseId,
+      config.appwrite.otpCollectionId,
+      res.documents[0].$id,
+      data
+    );
+  } catch (err) {
+    error("updateUserProfile:", err.message);
+    return null;
+  }
+}
+
+/* ====================================================
+   MECHANIC LOGIN (mechanic_rigistr)
+   ==================================================== */
+
+async function saveMechanicLogin(phone) {
+  if (!databases) return null;
+
+  try {
+    const existing = await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.mechanicCollectionId,
+      [Query.equal("Mobile_Number", phone)]
+    );
+
+    if (existing.total > 0) {
+      return existing.documents[0];
+    }
+
+    return await databases.createDocument(
+      config.appwrite.databaseId,
+      config.appwrite.mechanicCollectionId,
+      ID.unique(),
+      {
+        Mobile_Number: phone,
+      }
+    );
+  } catch (err) {
+    error("saveMechanicLogin:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Update mechanic profile after registration
+ */
+async function updateMechanicProfile(phone, data) {
+  if (!databases) return null;
+
+  try {
+    const res = await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.mechanicCollectionId,
+      [Query.equal("Mobile_Number", phone)]
+    );
+
+    if (res.total === 0) return null;
+
+    return await databases.updateDocument(
+      config.appwrite.databaseId,
+      config.appwrite.mechanicCollectionId,
+      res.documents[0].$id,
+      data
+    );
+  } catch (err) {
+    error("updateMechanicProfile:", err.message);
+    return null;
+  }
+}
+
+/* ====================================================
+   SERVICE REQUESTS (user ↔ mechanic)
+   ==================================================== */
+
+async function createServiceRequest(data) {
+  if (!databases) return null;
+
+  try {
+    return await databases.createDocument(
+      config.appwrite.databaseId,
+      config.appwrite.serviceRequestCollectionId,
+      ID.unique(),
+      {
+        ...data,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      }
+    );
+  } catch (err) {
+    error("createServiceRequest:", err.message);
+    return null;
+  }
+}
+
+async function getUserHistory(phone) {
+  return databases.listDocuments(
+    config.appwrite.databaseId,
+    config.appwrite.serviceRequestCollectionId,
+    [Query.equal("user_phone", phone)]
+  );
+}
+
+async function getMechanicHistory(phone) {
+  return databases.listDocuments(
+    config.appwrite.databaseId,
+    config.appwrite.serviceRequestCollectionId,
+    [Query.equal("mechanic_phone", phone)]
+  );
+}
+
+/* ================= EXPORTS ================= */
+
+module.exports = {
+  saveUserLogin,
+  updateUserProfile,
+
+  saveMechanicLogin,
+  updateMechanicProfile,
+
+  createServiceRequest,
+  getUserHistory,
+  getMechanicHistory,
+};
