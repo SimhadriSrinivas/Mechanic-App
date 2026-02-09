@@ -1,6 +1,6 @@
 // app/(tabs)/home/components/AdBanner.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { View, Image, StyleSheet, Animated } from "react-native";
+import { View, StyleSheet, Animated } from "react-native";
 
 const IMAGES = [
   require("../../../../assets/images/Add-1.webp"),
@@ -15,29 +15,26 @@ export default function AdBanner() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      // fade out
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 300,
+        duration: 250, // smoother
         useNativeDriver: true,
       }).start(() => {
-        // switch image
         setIndex((prev) => (prev + 1) % IMAGES.length);
 
-        // fade in
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 250,
           useNativeDriver: true,
         }).start();
       });
-    }, 5000); // 5 seconds
+    }, 5000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [fadeAnim]);
 
   return (
-    <View style={[styles.banner, { width: "100%", height: 90 }]}>
+    <View style={styles.wrapper}>
       <Animated.Image
         source={IMAGES[index]}
         style={[styles.image, { opacity: fadeAnim }]}
@@ -48,15 +45,20 @@ export default function AdBanner() {
 }
 
 const styles = StyleSheet.create({
-  banner: {
-    borderRadius: 8,
+  /* Premium card wrapper */
+  wrapper: {
+    width: "105%",
+    height: 120,
+    borderRadius: 14, // ⬅️ smoother, premium
     overflow: "hidden",
-    backgroundColor: "#e6e6e6",
-    borderWidth: 2,
-    borderColor: "#9ec9ff",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "#eef3fb", // soft fallback
+    elevation: 4, // Android shadow
+    shadowColor: "#000", // iOS shadow
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
+
   image: {
     width: "100%",
     height: "100%",

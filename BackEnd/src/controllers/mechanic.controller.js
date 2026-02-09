@@ -2,13 +2,103 @@
 
 const {
   updateMechanicProfile,
+  getMechanicByPhone,
 } = require("../services/appwrite.service");
+
 const { encryptAadhaar } = require("../utils/crypto");
 
-/**
- * Complete / Update mechanic profile
- * This is called AFTER mechanic login
- */
+/* =====================================
+   GET MECHANIC PROFILE
+   ===================================== */
+async function getMechanicProfile(req, res) {
+  try {
+    const { phone } = req.query;
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "phone is required",
+      });
+    }
+
+    const mechanic = await getMechanicByPhone(phone);
+
+    if (!mechanic) {
+      return res.status(404).json({
+        success: false,
+        message: "Mechanic not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        name: mechanic.Name || "",
+        phone: mechanic.Mobile_Number,
+        rating: mechanic.rating ?? 4.5,
+        service: mechanic.TypeOfService || "",
+        address: mechanic.Address || "",
+      },
+    });
+  } catch (err) {
+    console.error("getMechanicProfile error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/* =====================================
+   UPDATE MECHANIC PROFILE (EDIT)
+   ===================================== */
+async function updateMechanicProfileController(req, res) {
+  try {
+    const {
+      phone,
+      name,
+      service,
+      address,
+    } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "phone is required",
+      });
+    }
+
+    const updateData = {};
+
+    if (name) updateData.Name = name;
+    if (service) updateData.TypeOfService = service;
+    if (address) updateData.Address = address;
+
+    const updated = await updateMechanicProfile(phone, updateData);
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Mechanic not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+    });
+  } catch (err) {
+    console.error("updateMechanicProfileController error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/* =====================================
+   REGISTER MECHANIC (INITIAL)
+   ===================================== */
 async function registerMechanic(req, res) {
   try {
     const {
@@ -24,7 +114,6 @@ async function registerMechanic(req, res) {
       longitude,
     } = req.body;
 
-    // Basic validation
     if (
       !firstName ||
       !lastName ||
@@ -43,31 +132,19 @@ async function registerMechanic(req, res) {
     if (aadhaar.length !== 12) {
       return res.status(400).json({
         success: false,
-        message: "Aadhaar number must be 12 digits",
+        message: "Aadhaar must be 12 digits",
       });
     }
 
-    if (
-      latitude === undefined ||
-      longitude === undefined ||
-      isNaN(latitude) ||
-      isNaN(longitude)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid latitude and longitude are required",
-      });
-    }
-
-    // Encrypt Aadhaar
     const aadhaarEncrypted = encryptAadhaar(aadhaar);
 
-    // Prepare update data (match Appwrite column names exactly)
     const updateData = {
       Name: `${firstName} ${lastName}`,
-      TypeOfService: JSON.stringify(serviceTypes),
-      Role: JSON.stringify(roles || []),
-      TypeOfVehicle: JSON.stringify(vehicleTypes || []),
+      TypeOfService: serviceTypes.join(", "),
+      Role: Array.isArray(roles) ? roles.join(", ") : "",
+      TypeOfVehicle: Array.isArray(vehicleTypes)
+        ? vehicleTypes.join(", ")
+        : "",
       Address: address,
       Aadhaar_Number: aadhaarEncrypted,
       latitude: Number(latitude),
@@ -75,19 +152,18 @@ async function registerMechanic(req, res) {
       profile_completed: true,
     };
 
-    const updatedDoc = await updateMechanicProfile(phone, updateData);
+    const updated = await updateMechanicProfile(phone, updateData);
 
-    if (!updatedDoc) {
+    if (!updated) {
       return res.status(404).json({
         success: false,
-        message: "Mechanic not found. Please login again.",
+        message: "Mechanic not found. Login again.",
       });
     }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: "Mechanic profile updated successfully",
-      mechanicId: updatedDoc.$id,
+      message: "Mechanic profile registered successfully",
     });
   } catch (err) {
     console.error("registerMechanic error:", err);
@@ -100,4 +176,6 @@ async function registerMechanic(req, res) {
 
 module.exports = {
   registerMechanic,
+  getMechanicProfile,
+  updateMechanicProfileController, // ✅ THIS WAS MISSING
 };

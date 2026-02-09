@@ -18,8 +18,6 @@ import { verifyOtp, sendOtp } from "../../services/api";
 import {
   saveLoggedInPhone,
   saveUserRole,
-  saveMechanicProfileCompleted,
-  getMechanicRegStep,
   saveMechanicRegStep,
 } from "../../utils/storage";
 
@@ -49,7 +47,7 @@ export default function OtpScreen() {
 
   const boxSize = Math.min(60, Math.floor((width - 80) / OTP_LENGTH));
 
-  /* TIMER */
+  /* ================= TIMER ================= */
   useEffect(() => {
     const t = setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
@@ -57,7 +55,7 @@ export default function OtpScreen() {
     return () => clearInterval(t);
   }, []);
 
-  /* KEYBOARD */
+  /* ================= KEYBOARD ================= */
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (e) => {
       Animated.timing(bottomAnim, {
@@ -81,7 +79,7 @@ export default function OtpScreen() {
     };
   }, []);
 
-  /* SAFETY */
+  /* ================= SAFETY ================= */
   if (!phone || !role) {
     return (
       <SafeAreaView style={styles.center}>
@@ -92,9 +90,7 @@ export default function OtpScreen() {
 
   const openKeyboard = () => {
     Keyboard.dismiss();
-    setTimeout(() => {
-      hiddenInputRef.current?.focus();
-    }, 50);
+    setTimeout(() => hiddenInputRef.current?.focus(), 50);
   };
 
   const onChangeOtp = (text: string) => {
@@ -107,46 +103,38 @@ export default function OtpScreen() {
     }
   };
 
-  /* VERIFY OTP (FIXED) */
+  /* ================= VERIFY OTP (FINAL FIX) ================= */
   const verifyCode = async (code: string) => {
     try {
       setLoading(true);
 
       const res = await verifyOtp(phone, code, role);
 
-      if (!res.ok) {
-        setError(res.message || res.reason || "Wrong OTP");
-        setOtp("");
-        openKeyboard();
+      if (!res?.ok) {
+        setError(res?.message || "Verification failed");
         return;
       }
 
-      // SAVE AUTH
+      // ✅ Save auth basics
       await saveLoggedInPhone(phone);
       await saveUserRole(role);
 
-      if (role === "user") {
-        router.replace("/(tabs)");
-        return;
-      }
+      // ✅ BACKEND IS SOURCE OF TRUTH
+      const profileCompleted =
+        res.profile?.profile_completed === true ||
+        res.profile?.completed === true;
 
-      // mechanic flow
-      const isProfileCompleted = !!res.profile?.completed;
-      await saveMechanicProfileCompleted(isProfileCompleted);
-
-      if (isProfileCompleted) {
-        await saveMechanicRegStep("done");
-        router.replace("/(mechanic)/home");
-        return;
-      }
-
-      const step = await getMechanicRegStep();
-
-      if (step === "image") {
-        router.replace("/(auth)/mechanic-image");
+      if (role === "mechanic") {
+        if (profileCompleted) {
+          // 🔥 Sync local state with DB
+          await saveMechanicRegStep("done");
+          router.replace("/(mechanic)/home");
+        } else {
+          await saveMechanicRegStep("form");
+          router.replace("/(auth)/mechanic-register");
+        }
       } else {
-        await saveMechanicRegStep("form");
-        router.replace("/(auth)/mechanic-register");
+        router.replace("/");
       }
     } catch (e: any) {
       setError(e.message || "Something went wrong");
@@ -155,7 +143,7 @@ export default function OtpScreen() {
     }
   };
 
-  /* RESEND */
+  /* ================= RESEND OTP ================= */
   const onResend = async () => {
     if (secondsLeft > 0 || resendCount >= MAX_RESENDS) return;
     await sendOtp(phone);
@@ -169,12 +157,13 @@ export default function OtpScreen() {
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
-  const digits = Array.from({ length: OTP_LENGTH }).map(
-    (_, i) => otp[i] || ""
-  );
+  const digits = Array.from({ length: OTP_LENGTH }).map((_, i) => otp[i] || "");
 
   return (
-    <LinearGradient colors={["#02112b", "#0a3b86", "#3b8ad0"]} style={{ flex: 1 }}>
+    <LinearGradient
+      colors={["#02112b", "#0a3b86", "#3b8ad0"]}
+      style={{ flex: 1 }}
+    >
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
           style={styles.container}
@@ -217,8 +206,8 @@ export default function OtpScreen() {
                 {resendCount >= MAX_RESENDS
                   ? "Resend limit reached"
                   : secondsLeft > 0
-                  ? `Resend in ${formatTime()}`
-                  : "Resend OTP"}
+                    ? `Resend in ${formatTime()}`
+                    : "Resend OTP"}
               </Text>
             </TouchableOpacity>
           </TouchableOpacity>

@@ -1,23 +1,23 @@
 // src/routes/mechanic.routes.js
 
 const express = require("express");
-const {
-  registerMechanic,
-} = require("../controllers/mechanic.controller");
-
 const router = express.Router();
 
-/**
- * POST /api/mechanic/register
- * Complete mechanic profile after login
- */
+const {
+  registerMechanic,
+  getMechanicProfile,
+  updateMechanicProfileController,
+} = require("../controllers/mechanic.controller");
+
+/* ================= ROUTES ================= */
+
+// Register / complete profile
 router.post("/register", registerMechanic);
 
-/**
- * Future:
- * PUT /api/mechanic/update-location
- * - update mechanic latitude & longitude when online
- */
-// router.put("/update-location", updateMechanicLocation);
+// Get profile
+router.get("/profile", getMechanicProfile);
+
+// Update profile (edit)
+router.put("/profile", updateMechanicProfileController);
 
 module.exports = router;

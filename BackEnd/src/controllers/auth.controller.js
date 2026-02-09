@@ -23,7 +23,7 @@ async function sendOtpHandler(req, res) {
       });
     }
 
-    //  Rate limit per IP
+    // Rate limit per IP
     try {
       await rateLimiter.consume(req.ip);
     } catch {
@@ -32,17 +32,16 @@ async function sendOtpHandler(req, res) {
       });
     }
 
-    //  Generate OTP
+    // Generate OTP
     const code = createOtp(phone);
 
-    //  Send SMS
     const text = `Your MEC App OTP is ${code}. It expires in ${
       process.env.OTP_EXPIRY_MINUTES || 5
     } minutes.`;
 
     await sendSms(phone, text);
 
-    info("OTP sent to", phone);
+    info("[OTP] Sent to", phone);
 
     return res.json({ ok: true, message: "OTP sent" });
   } catch (err) {
@@ -52,14 +51,12 @@ async function sendOtpHandler(req, res) {
 }
 
 /* ====================================================
-   VERIFY OTP (ROLE BASED)
+   VERIFY OTP (ROLE + DB BASED)
    ==================================================== */
 
 async function verifyOtpHandler(req, res) {
   try {
-    const phone = req.body?.phone;
-    const otp = req.body?.otp;
-    const role = req.body?.role; //  IMPORTANT
+    const { phone, otp, role } = req.body || {};
 
     if (!phone || !otp || !role) {
       return res.status(400).json({
@@ -68,12 +65,10 @@ async function verifyOtpHandler(req, res) {
     }
 
     if (!["user", "mechanic"].includes(role)) {
-      return res.status(400).json({
-        message: "Invalid role",
-      });
+      return res.status(400).json({ message: "Invalid role" });
     }
 
-    //  Verify OTP
+    // Verify OTP
     const result = verifyOtp(phone, String(otp));
 
     if (!result.ok) {
@@ -83,22 +78,48 @@ async function verifyOtpHandler(req, res) {
       });
     }
 
-    //  ROLE BASED SAVE
-    let profile = null;
+    /* ================= USER FLOW ================= */
 
     if (role === "user") {
-      profile = await saveUserLogin(phone);
+      await saveUserLogin(phone);
+
+      return res.json({
+        ok: true,
+        role: "user",
+        profile: { exists: true },
+      });
     }
 
-    if (role === "mechanic") {
-      profile = await saveMechanicLogin(phone);
+    /* ================= MECHANIC FLOW ================= */
+
+    const mechanic = await saveMechanicLogin(phone);
+
+    if (!mechanic) {
+      return res.status(404).json({
+        ok: false,
+        message: "Mechanic not found",
+      });
     }
+
+    info("[verifyOtpHandler] mechanic:", mechanic);
+
+    /**
+     * IMPORTANT:
+     * Appwrite schema uses `profile_completed` (snake_case)
+     */
+    const isCompleted = mechanic.profile_completed === true;
+
+    info("[verifyOtpHandler] isCompleted:", isCompleted);
 
     return res.json({
       ok: true,
       message: "OTP verified",
-      role,
-      profile: profile || { phone },
+      role: "mechanic",
+      profile: {
+        exists: true,
+        completed: isCompleted,
+      },
+      mechanicId: mechanic.$id, // send only ID (clean & safe)
     });
   } catch (err) {
     error("verifyOtpHandler:", err.message);

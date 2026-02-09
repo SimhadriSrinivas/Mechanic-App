@@ -1,57 +1,101 @@
-// app/(tabs)/menu/profile.tsx
-import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { getUserProfile } from "../../../services/userApi";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { getCurrentUser, getUserProfile } from "@/services/userApi";
 
-export default function ProfileDetail() {
-  const [profile, setProfile] = useState<any>(null);
+export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let m = true;
-    (async () => {
-      const p = await getUserProfile();
-      if (!m) return;
-      setProfile(p);
-      setLoading(false);
-    })();
-    return () => {
-      m = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 24 }} />;
+      const loadProfile = async () => {
+        try {
+          setLoading(true);
+          setError(null);
+
+          // Get logged-in Appwrite user
+          const user = await getCurrentUser();
+
+          if (!user?.phone) {
+            throw new Error("Phone number not found");
+          }
+
+          // Fetch profile from DB
+          const data = await getUserProfile(user.phone);
+
+          if (isActive) {
+            setProfile(data);
+          }
+        } catch (err: any) {
+          if (isActive) {
+            setError(err.message);
+          }
+        } finally {
+          if (isActive) {
+            setLoading(false);
+          }
+        }
+      };
+
+      loadProfile();
+
+      return () => {
+        isActive = false; // cleanup on menu close / navigation
+      };
+    }, [])
+  );
+
+  // ---------------- UI ----------------
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={local.container}>
-      <View>
-        <Text style={local.title}>User Profile</Text>
-        <View style={local.card}>
-          <Text style={local.label}>Name</Text>
-          <Text style={local.value}>{profile?.name ?? "—"}</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Profile</Text>
 
-          <Text style={local.label}>Phone</Text>
-          <Text style={local.value}>{profile?.phone ?? "—"}</Text>
-
-          <Text style={local.label}>Email</Text>
-          <Text style={local.value}>{profile?.email ?? "—"}</Text>
-        </View>
-      </View>
-    </SafeAreaView>
+      <Text>Name: {profile?.name}</Text>
+      <Text>Phone: {profile?.phone}</Text>
+      <Text>Role: {profile?.role}</Text>
+    </View>
   );
 }
 
-const local = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
-  title: { fontSize: 20, fontWeight: "700", marginBottom: 12 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#efeae6",
+// ---------------- STYLES ----------------
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
   },
-  label: { marginTop: 10, color: "#777", fontSize: 13 },
-  value: { marginTop: 4, fontSize: 16, fontWeight: "600", color: "#111" },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  error: {
+    color: "red",
+  },
 });

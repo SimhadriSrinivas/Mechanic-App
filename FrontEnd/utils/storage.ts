@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /* ================= STORAGE KEYS ================= */
 
+// Auth
 const KEY_PHONE = "auth_phone";
 const KEY_ROLE = "auth_role";
 const KEY_MECHANIC_PROFILE = "mechanic_profile_completed";
@@ -11,10 +12,21 @@ const KEY_MECHANIC_PROFILE = "mechanic_profile_completed";
 const KEY_MECH_REG_STEP = "mechanic_reg_step";
 const KEY_MECH_REG_FORM = "mechanic_reg_form";
 
+// 🔹 Mechanic duty & location (MAP RELATED)
+const KEY_MECH_DUTY_STATUS = "mechanic_duty_status";
+const KEY_MECH_LAST_LOCATION = "mechanic_last_location";
+
 /* ================= TYPES ================= */
 
 export type UserRole = "user" | "mechanic";
 export type MechanicRegStep = "form" | "image" | "done";
+
+export type StoredLocation = {
+  latitude: number;
+  longitude: number;
+  heading: number;
+  timestamp: number;
+};
 
 /* ================= SAVE AUTH ================= */
 
@@ -30,10 +42,7 @@ export async function saveUserRole(role: UserRole) {
  * Explicitly mark mechanic profile completion state
  */
 export async function saveMechanicProfileCompleted(value: boolean) {
-  await AsyncStorage.setItem(
-    KEY_MECHANIC_PROFILE,
-    value ? "true" : "false"
-  );
+  await AsyncStorage.setItem(KEY_MECHANIC_PROFILE, value ? "true" : "false");
 }
 
 /* ================= GET AUTH ================= */
@@ -73,7 +82,9 @@ export async function saveMechanicRegStep(step: MechanicRegStep) {
 
 export async function getMechanicRegStep(): Promise<MechanicRegStep | null> {
   const step = await AsyncStorage.getItem(KEY_MECH_REG_STEP);
-  if (step === "form" || step === "image" || step === "done") return step;
+  if (step === "form" || step === "image" || step === "done") {
+    return step as MechanicRegStep;
+  }
   return null;
 }
 
@@ -96,6 +107,50 @@ export async function getMechanicFormDraft<T>(): Promise<T | null> {
   return raw ? JSON.parse(raw) : null;
 }
 
+/* ================= MECHANIC DUTY (MAP) ================= */
+
+/**
+ * Save mechanic ON / OFF duty status (temporary)
+ */
+export async function saveMechanicDutyStatus(onDuty: boolean) {
+  await AsyncStorage.setItem(KEY_MECH_DUTY_STATUS, JSON.stringify(onDuty));
+}
+
+/**
+ * Get mechanic ON / OFF duty status
+ */
+export async function getMechanicDutyStatus(): Promise<boolean | null> {
+  const raw = await AsyncStorage.getItem(KEY_MECH_DUTY_STATUS);
+  return raw ? JSON.parse(raw) : null;
+}
+
+/* ================= MECHANIC LOCATION (MAP) ================= */
+
+/**
+ * Save last known GOOD GPS fix (used to avoid jump on reload)
+ */
+export async function saveLastMechanicLocation(location: StoredLocation) {
+  await AsyncStorage.setItem(
+    KEY_MECH_LAST_LOCATION,
+    JSON.stringify(location)
+  );
+}
+
+/**
+ * Get last known GOOD GPS fix
+ */
+export async function getLastMechanicLocation(): Promise<StoredLocation | null> {
+  const raw = await AsyncStorage.getItem(KEY_MECH_LAST_LOCATION);
+  return raw ? JSON.parse(raw) : null;
+}
+
+/**
+ * Clear cached GPS location (optional)
+ */
+export async function clearLastMechanicLocation() {
+  await AsyncStorage.removeItem(KEY_MECH_LAST_LOCATION);
+}
+
 /* ================= RESET HELPERS ================= */
 
 /**
@@ -111,6 +166,9 @@ export async function resetMechanicRegistration() {
 
 /* ================= CLEAR ALL (LOGOUT) ================= */
 
+/**
+ * Clears ALL auth + mechanic + map related storage
+ */
 export async function clearAuthStorage() {
   await AsyncStorage.multiRemove([
     KEY_PHONE,
@@ -118,5 +176,7 @@ export async function clearAuthStorage() {
     KEY_MECHANIC_PROFILE,
     KEY_MECH_REG_STEP,
     KEY_MECH_REG_FORM,
+    KEY_MECH_DUTY_STATUS,
+    KEY_MECH_LAST_LOCATION,
   ]);
 }

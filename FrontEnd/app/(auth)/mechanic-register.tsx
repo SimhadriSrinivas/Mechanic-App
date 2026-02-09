@@ -15,7 +15,7 @@ import {
   saveMechanicFormDraft,
   getMechanicFormDraft,
   saveMechanicRegStep,
-  saveMechanicProfileCompleted,
+  // saveMechanicProfileCompleted,
   getMechanicRegStep, // ✅ IMPORTANT
 } from "../../utils/storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -95,9 +95,9 @@ export default function MechanicRegister() {
         setVehicleTypes(draft.vehicleTypes || []);
       }
 
-      // 🔥 CRITICAL FIX
-      const step = await getMechanicRegStep();
-      if (!step) {
+      // Only set 'form' if there is no existing step (avoid overwriting step set by OTP flow)
+      const existingStep = await getMechanicRegStep();
+      if (!existingStep) {
         await saveMechanicRegStep("form");
       }
     })();
@@ -115,7 +115,15 @@ export default function MechanicRegister() {
       roles,
       vehicleTypes,
     });
-  }, [firstName, lastName, address, aadhaar, serviceTypes, roles, vehicleTypes]);
+  }, [
+    firstName,
+    lastName,
+    address,
+    aadhaar,
+    serviceTypes,
+    roles,
+    vehicleTypes,
+  ]);
 
   /* ================= VALIDATION ================= */
 
@@ -134,8 +142,7 @@ export default function MechanicRegister() {
       newErrors.serviceTypes = "Select at least one service";
 
     if (isMechanicSelected) {
-      if (roles.length === 0)
-        newErrors.roles = "Select at least one role";
+      if (roles.length === 0) newErrors.roles = "Select at least one role";
       if (vehicleTypes.length === 0)
         newErrors.vehicleTypes = "Select vehicle type";
     }
@@ -173,7 +180,7 @@ export default function MechanicRegister() {
         longitude: loc.coords.longitude,
       });
 
-      await saveMechanicProfileCompleted(false);
+      // await saveMechanicProfileCompleted(false);
       await saveMechanicRegStep("image");
 
       router.replace("/(auth)/mechanic-image");
@@ -189,7 +196,9 @@ export default function MechanicRegister() {
     arr: string[],
     setArr: React.Dispatch<React.SetStateAction<string[]>>
   ) => {
-    setArr(arr.includes(label) ? arr.filter(i => i !== label) : [...arr, label]);
+    setArr(
+      arr.includes(label) ? arr.filter((i) => i !== label) : [...arr, label]
+    );
   };
 
   return (
@@ -271,7 +280,11 @@ export default function MechanicRegister() {
                   <MaterialCommunityIcons name={item.icon as any} size={20} />
                   <Text style={styles.dropdownItemText}>{item.label}</Text>
                   {serviceTypes.includes(item.label) && (
-                    <MaterialCommunityIcons name="check" size={18} color="green" />
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={18}
+                      color="green"
+                    />
                   )}
                 </TouchableOpacity>
               ))}
@@ -300,7 +313,10 @@ export default function MechanicRegister() {
                       style={styles.dropdownItem}
                       onPress={() => toggleSelect(item.label, roles, setRoles)}
                     >
-                      <MaterialCommunityIcons name={item.icon as any} size={20} />
+                      <MaterialCommunityIcons
+                        name={item.icon as any}
+                        size={20}
+                      />
                       <Text style={styles.dropdownItemText}>{item.label}</Text>
                       {roles.includes(item.label) && (
                         <MaterialCommunityIcons
@@ -338,7 +354,10 @@ export default function MechanicRegister() {
                         toggleSelect(item.label, vehicleTypes, setVehicleTypes)
                       }
                     >
-                      <MaterialCommunityIcons name={item.icon as any} size={20} />
+                      <MaterialCommunityIcons
+                        name={item.icon as any}
+                        size={20}
+                      />
                       <Text style={styles.dropdownItemText}>{item.label}</Text>
                       {vehicleTypes.includes(item.label) && (
                         <MaterialCommunityIcons
@@ -387,7 +406,7 @@ export default function MechanicRegister() {
               <Text style={styles.error}>{errors.aadhaar}</Text>
             )}
 
-              <TouchableOpacity style={styles.btn} onPress={onRegister}>
+            <TouchableOpacity style={styles.btn} onPress={onRegister}>
               <Text style={styles.btnText}>
                 {loading ? "Submitting..." : "Next"}
               </Text>

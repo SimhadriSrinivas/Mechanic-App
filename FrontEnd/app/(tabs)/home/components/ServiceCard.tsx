@@ -17,24 +17,43 @@ type Props = {
 };
 
 function ServiceCardInner({ item, onPress }: Props) {
+  const ICON_COLOR = colors.navyStart; // 🎯 premium dark navy
+
   const IconComponent = (() => {
     switch (item.iconLib) {
       case "FontAwesome5":
         return (
-          <FontAwesome5 name={item.iconName as any} size={28} color={"#000"} />
+          <FontAwesome5
+            name={item.iconName as any}
+            size={26}
+            color={ICON_COLOR}
+          />
         );
+
       case "Ionicons":
         return (
-          <Ionicons name={item.iconName as any} size={28} color={"#000"} />
+          <Ionicons
+            name={item.iconName as any}
+            size={26}
+            color={ICON_COLOR}
+          />
         );
+
       case "Entypo":
-        return <Entypo name={item.iconName as any} size={28} color={"#000"} />;
+        return (
+          <Entypo
+            name={item.iconName as any}
+            size={26}
+            color={ICON_COLOR}
+          />
+        );
+
       default:
         return (
           <MaterialCommunityIcons
             name={item.iconName as any}
-            size={28}
-            color={"#000"}
+            size={26}
+            color={ICON_COLOR}
           />
         );
     }
@@ -46,6 +65,7 @@ function ServiceCardInner({ item, onPress }: Props) {
       style={{ alignItems: "center", width: UI.OUTER_SIZE }}
       onPress={() => onPress?.(item)}
     >
+      {/* Icon container */}
       <LinearGradient
         colors={[colors.navyStart, colors.navyEnd]}
         start={[0, 0]}
@@ -55,7 +75,17 @@ function ServiceCardInner({ item, onPress }: Props) {
         <View style={styles.serviceCardInner}>{IconComponent}</View>
       </LinearGradient>
 
-      <Text numberOfLines={1} style={styles.serviceLabel}>
+      {/* Label (Paytm / PhonePe style) */}
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.serviceLabel,
+          {
+            fontWeight: "400",              // ✅ regular
+            color: colors.textPrimary,      // ✅ softer than pure black
+          },
+        ]}
+      >
         {item.title}
       </Text>
     </TouchableOpacity>

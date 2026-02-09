@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,13 +16,7 @@ import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { sendOtp } from "../../services/api";
-import {
-  getLoggedInPhone,
-  getUserRole,
-  isMechanicProfileCompleted,
-  saveUserRole,
-  getMechanicRegStep,
-} from "../../utils/storage";
+import { saveUserRole } from "../../utils/storage";
 
 const { height } = Dimensions.get("window");
 type Role = "user" | "mechanic";
@@ -38,51 +32,6 @@ export default function LoginScreen() {
 
   const phoneRef = useRef<TextInput | null>(null);
   const bottomAnim = useRef(new Animated.Value(0)).current;
-
-  /* ================= AUTO REDIRECT (STRICT FIX) ================= */
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      const savedPhone = await getLoggedInPhone();
-      const savedRole = await getUserRole();
-
-      // Not logged in → allow login screen
-      if (!savedPhone || !savedRole) return;
-
-      if (!mounted) return;
-
-      // ✅ USER FLOW
-      if (savedRole === "user") {
-        router.replace("/(tabs)");
-        return;
-      }
-
-      // ✅ MECHANIC FLOW
-      if (savedRole === "mechanic") {
-        const completed = await isMechanicProfileCompleted();
-
-        if (completed) {
-          router.replace("/(mechanic)/home");
-          return;
-        }
-
-        const step = await getMechanicRegStep();
-
-        if (step === "image") {
-          router.replace("/(auth)/mechanic-image");
-          return;
-        }
-
-        // default → registration form
-        router.replace("/(auth)/mechanic-register");
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   /* ================= ROLE SELECT ================= */
 
@@ -153,7 +102,10 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaProvider>
-      <LinearGradient colors={["#02112b", "#0a3b86", "#3b8ad0"]} style={{ flex: 1 }}>
+      <LinearGradient
+        colors={["#02112b", "#0a3b86", "#3b8ad0"]}
+        style={{ flex: 1 }}
+      >
         <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
@@ -256,10 +208,7 @@ export default function LoginScreen() {
               <TouchableOpacity
                 onPress={onSendOtp}
                 disabled={isButtonDisabled}
-                style={[
-                  styles.button,
-                  isButtonDisabled && { opacity: 0.5 },
-                ]}
+                style={[styles.button, isButtonDisabled && { opacity: 0.5 }]}
               >
                 <Text style={styles.buttonText}>
                   {loading ? "Sending..." : "Send OTP"}
