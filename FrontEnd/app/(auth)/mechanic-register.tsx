@@ -22,6 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { registerMechanic } from "../../services/api";
+import { saveMechanicProfileData } from "../../utils/storage";
 
 /* ================= OPTIONS ================= */
 
@@ -179,7 +180,12 @@ export default function MechanicRegister() {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
       });
-
+      await saveMechanicProfileData({
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`, // full name
+        phone: `+91${phone}`,
+      });
       // await saveMechanicProfileCompleted(false);
       await saveMechanicRegStep("image");
 
@@ -194,10 +200,10 @@ export default function MechanicRegister() {
   const toggleSelect = (
     label: string,
     arr: string[],
-    setArr: React.Dispatch<React.SetStateAction<string[]>>
+    setArr: React.Dispatch<React.SetStateAction<string[]>>,
   ) => {
     setArr(
-      arr.includes(label) ? arr.filter((i) => i !== label) : [...arr, label]
+      arr.includes(label) ? arr.filter((i) => i !== label) : [...arr, label],
     );
   };
 

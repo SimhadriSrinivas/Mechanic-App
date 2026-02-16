@@ -5,14 +5,16 @@ import {
   ActivityIndicator,
   Text,
   Dimensions,
+  Platform,
 } from "react-native";
-import { WebView } from "react-native-webview";
+
 import * as Location from "expo-location";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { getLastLocation, saveLastLocation } from "@/utils/mapStorage";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type Coords = {
   latitude: number;
@@ -21,8 +23,16 @@ type Coords = {
   timestamp: number;
 };
 
-export default function DutyMap() {
-  const webViewRef = useRef<WebView>(null);
+type Props = {
+  acceptedRequest?: {
+    $id: string;
+    user_lat: number;
+    user_lng: number;
+  } | null;
+};
+
+export default function DutyMap({ acceptedRequest }: Props) {
+  const webViewRef = useRef<any>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const lastGoodRef = useRef<Coords | null>(null);
 
@@ -30,33 +40,26 @@ export default function DutyMap() {
   const [iconBase64, setIconBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= ICON LOAD (APK SAFE, ONCE) ================= */
+  /* ================= ICON LOAD ================= */
   useEffect(() => {
     (async () => {
       const asset = Asset.fromModule(
-        require("../../../../assets/images/Mechnaic-icon.webp"),
+        require("../../../../assets/images/Mechnaic-icon.webp")
       );
       await asset.downloadAsync();
-      const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
-        encoding: "base64",
-      });
-      setIconBase64(`data:image/webp;base64,${base64}`);
-    })();
-  }, []);
 
-  /* ================= INSTANT MAP LOCATION (CACHE FIRST) ================= */
-  useEffect(() => {
-    (async () => {
-      const stored = await getLastLocation();
-      if (stored) {
-        lastGoodRef.current = stored;
-        setCoords(stored);
-        setLoading(false);
+      if (Platform.OS === "web") {
+        setIconBase64(asset.uri);
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
+          encoding: "base64",
+        });
+        setIconBase64(`data:image/webp;base64,${base64}`);
       }
     })();
   }, []);
 
-  /* ================= GPS INIT + LIVE TRACKING ================= */
+  /* ================= GPS ================= */
   useEffect(() => {
     let active = true;
 
@@ -64,7 +67,6 @@ export default function DutyMap() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
-      // FAST FIRST FIX (DO NOT BLOCK MAP)
       const quick = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
@@ -76,43 +78,47 @@ export default function DutyMap() {
         timestamp: Date.now(),
       };
 
-      lastGoodRef.current = first;
       setCoords(first);
+      lastGoodRef.current = first;
       await saveLastLocation(first);
       setLoading(false);
 
-      // HIGH ACCURACY CONTINUOUS TRACKING
       watchRef.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: 1,
+          timeInterval: 3000,
+          distanceInterval: 5,
         },
         async (loc) => {
           if (!active) return;
-          if (loc.coords.accuracy && loc.coords.accuracy > 15) return;
 
           const next: Coords = {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
-            heading:
-              loc.coords.speed && loc.coords.speed > 0.5
-                ? (loc.coords.heading ?? lastGoodRef.current?.heading ?? 0)
-                : (lastGoodRef.current?.heading ?? 0),
+            heading: loc.coords.heading ?? 0,
             timestamp: Date.now(),
           };
 
-          lastGoodRef.current = next;
           setCoords(next);
+          lastGoodRef.current = next;
           await saveLastLocation(next);
 
-          // 🔥 UPDATE MARKER WITHOUT RELOADING MAP
-          if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(
-              `window.updateMarker(${JSON.stringify(next)});true;`,
-            );
+          /* 🔥 SEND LIVE LOCATION TO BACKEND */
+          if (acceptedRequest && API_URL) {
+            fetch(`${API_URL}/api/service/update-location`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true",
+              },
+              body: JSON.stringify({
+                requestId: acceptedRequest.$id,
+                mechanic_lat: next.latitude,
+                mechanic_lng: next.longitude,
+              }),
+            }).catch(() => {});
           }
-        },
+        }
       );
     })();
 
@@ -120,10 +126,11 @@ export default function DutyMap() {
       active = false;
       watchRef.current?.remove();
     };
-  }, []);
+  }, [acceptedRequest]);
 
-  /* ================= MAP HTML (LOAD ONCE) ================= */
-  const mapHtml = coords
+  /* ================= MAP HTML ================= */
+  const mapHtml =
+  coords && iconBase64
     ? `
 <!DOCTYPE html>
 <html>
@@ -132,117 +139,104 @@ export default function DutyMap() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"/>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
 <style>
 html,body,#map{height:100%;margin:0}
-
-/* REMOVE LEAFLET DEFAULT BOX */
-.leaflet-div-icon{
-  background:transparent !important;
-  border:none !important;
-}
-
-/* MECHANIC ICON */
+.leaflet-div-icon{background:transparent;border:none;}
 .mechanic-icon{
-  width:64px;
-  height:64px;
+  width:64px;height:64px;
   background-image:url('${iconBase64}');
-  background-repeat:no-repeat;
   background-size:contain;
-  background-position:center;
-  transform-origin:50% 70%;
-}
-
-/* CONTROLS */
-.ctrl-group{
-  position:absolute;
-  right:12px;
-  bottom:12px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  z-index:1000;
-}
-.ctrl-btn{
-  width:44px;
-  height:44px;
-  background:#fff;
-  border-radius:22px;
-  box-shadow:0 2px 6px rgba(0,0,0,.3);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:22px;
+  background-repeat:no-repeat;
 }
 </style>
 </head>
-
 <body>
 <div id="map"></div>
 
-<div class="ctrl-group">
-  <div class="ctrl-btn" onclick="map.zoomIn()">+</div>
-  <div class="ctrl-btn" onclick="map.zoomOut()">−</div>
-  <div class="ctrl-btn" onclick="center()">📍</div>
-</div>
-
 <script>
-let map=L.map('map',{zoomControl:false,attributionControl:false})
-  .setView([${coords.latitude},${coords.longitude}],18);
+let map=L.map('map').setView([${coords.latitude},${coords.longitude}],16);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:19
 }).addTo(map);
 
-let icon=L.divIcon({
-  html:'<div id="bike" class="mechanic-icon"></div>',
+let mechanicIcon=L.divIcon({
+  html:'<div class="mechanic-icon"></div>',
   iconSize:[64,64],
-  iconAnchor:[32,45],
+  iconAnchor:[32,32],
   className:''
 });
 
-let marker=L.marker(
+let mechMarker=L.marker(
   [${coords.latitude},${coords.longitude}],
-  {icon}
+  {icon: mechanicIcon}
 ).addTo(map);
 
-window.updateMarker=function(d){
-  marker.setLatLng([d.latitude,d.longitude]);
-  document.getElementById("bike").style.transform =
-    'rotate('+d.heading+'deg)';
-};
-
-window.center=function(){
-  map.setView(marker.getLatLng(),map.getZoom(),{animate:true});
-};
+${
+  acceptedRequest
+    ? `
+L.Routing.control({
+  waypoints: [
+    L.latLng(${coords.latitude}, ${coords.longitude}),
+    L.latLng(${acceptedRequest.user_lat}, ${acceptedRequest.user_lng})
+  ],
+  lineOptions: {
+    styles: [{color: 'blue', weight: 6}]
+  },
+  createMarker: function(i, wp, nWps) {
+    return L.marker(wp.latLng);
+  },
+  routeWhileDragging: false,
+  addWaypoints: false,
+  draggableWaypoints: false,
+  fitSelectedRoutes: true,
+  show: false
+}).addTo(map);
+`
+    : ""
+}
 </script>
 </body>
 </html>
 `
     : "";
 
+
   if (loading || !coords || !iconBase64) {
     return (
-      <View style={[styles.container, { height: SCREEN_HEIGHT * 0.75 }]}>
+      <View style={[styles.container, { height: SCREEN_HEIGHT }]}>
         <ActivityIndicator size="large" />
         <Text>Loading map…</Text>
       </View>
     );
   }
 
+  if (Platform.OS === "web") {
+    return (
+      <View style={[styles.container, { height: SCREEN_HEIGHT }]}>
+        <iframe
+          srcDoc={mapHtml}
+          style={{ width: "100%", height: "100%", border: "none" }}
+        />
+      </View>
+    );
+  }
+
+  const NativeWebView = require("react-native-webview").WebView;
+
   return (
-    <View style={[styles.container, { height: SCREEN_HEIGHT * 0.75 }]}>
-      <WebView
+    <View style={[styles.container, { height: SCREEN_HEIGHT }]}>
+      <NativeWebView
         ref={webViewRef}
-        key="mechanic-map"
         source={{ html: mapHtml }}
         javaScriptEnabled
         domStorageEnabled
         originWhitelist={["*"]}
-        mixedContentMode="always"
-        allowFileAccess
-        allowUniversalAccessFromFileURLs
       />
     </View>
   );
@@ -250,7 +244,7 @@ window.center=function(){
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
+    borderRadius: 0,
     overflow: "hidden",
     backgroundColor: "#f2f2f2",
   },

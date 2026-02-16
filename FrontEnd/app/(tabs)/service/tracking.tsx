@@ -1,3 +1,5 @@
+// app/(tabs)/service/tracking.tsx
+
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -6,8 +8,8 @@ import {
   Text,
   TouchableOpacity,
   Alert,
+  Platform,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -16,7 +18,7 @@ import { getLoggedInPhone } from "@/utils/storage";
 
 export default function Tracking() {
   const router = useRouter();
-  const { vehicleType } = useLocalSearchParams<{ vehicleType: string }>();
+  const { vehicleType } = useLocalSearchParams<{ vehicleType?: string }>();
 
   const [coords, setCoords] = useState<{
     latitude: number;
@@ -27,32 +29,57 @@ export default function Tracking() {
 
   /* ================= GET USER LOCATION ================= */
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission required", "Location permission is needed");
-        return;
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission required",
+            "Location permission is needed"
+          );
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (!mounted) return;
+
+        setCoords({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+      } catch (err) {
+        Alert.alert("Error", "Failed to fetch location");
       }
-
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      setCoords({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /* ================= SEND SERVICE REQUEST ================= */
   const sendRequest = async () => {
     try {
+      if (loading) return; // prevent double tap
+
       setLoading(true);
 
       const phone = await getLoggedInPhone();
+
       if (!phone || !coords) {
-        Alert.alert("Error", "User not logged in");
+        Alert.alert("Error", "User not logged in or location unavailable");
+        return;
+      }
+
+      if (!vehicleType) {
+        Alert.alert("Error", "Vehicle type missing");
         return;
       }
 
@@ -61,10 +88,8 @@ export default function Tracking() {
         lat: coords.latitude,
         lng: coords.longitude,
         service: "general-repair",
-        vehicleType, // ✅ CORRECT VEHICLE TYPE
+        vehicleType,
       };
-
-      console.log("📤 Final payload sent:", payload);
 
       const requestId = await createRequest(payload);
 
@@ -73,7 +98,7 @@ export default function Tracking() {
         params: { requestId },
       });
     } catch (err) {
-      console.error("❌ sendRequest error:", err);
+      console.error("sendRequest error:", err);
       Alert.alert("Error", "Failed to send request");
     } finally {
       setLoading(false);
@@ -85,6 +110,7 @@ export default function Tracking() {
   }
 
   /* ================= MAP HTML ================= */
+
   const mapHtml = `
 <!DOCTYPE html>
 <html>
@@ -138,17 +164,30 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
 
   return (
     <View style={{ flex: 1 }}>
-      {/* MAP */}
-      <WebView
-        source={{ html: mapHtml }}
-        javaScriptEnabled
-        domStorageEnabled
-        originWhitelist={["*"]}
-        mixedContentMode="always"
-        style={{ flex: 1 }}
-      />
+      {/* ================= MAP ================= */}
 
-      {/* BOTTOM ACTION (RAPIDO STYLE) */}
+      {Platform.OS === "web" ? (
+        <iframe
+          srcDoc={mapHtml}
+          style={{ flex: 1, border: "none", width: "100%" }}
+        />
+      ) : (
+        (() => {
+          const { WebView } = require("react-native-webview");
+          return (
+            <WebView
+              source={{ html: mapHtml }}
+              javaScriptEnabled
+              domStorageEnabled
+              originWhitelist={["*"]}
+              mixedContentMode="always"
+              style={{ flex: 1 }}
+            />
+          );
+        })()
+      )}
+
+      {/* ================= BOTTOM ACTION ================= */}
       <View style={styles.bottomSheet}>
         <TouchableOpacity
           style={styles.button}
@@ -156,7 +195,9 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
           disabled={loading}
         >
           <Text style={styles.buttonText}>
-            {loading ? "Sending Request..." : `Request ${vehicleType} Mechanic`}
+            {loading
+              ? "Sending Request..."
+              : `Request ${vehicleType ?? ""} Mechanic`}
           </Text>
         </TouchableOpacity>
       </View>

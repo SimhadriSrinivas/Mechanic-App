@@ -1,25 +1,71 @@
 // services/api.ts
-// Android-safe API layer for ngrok + production
 
-const BACKEND_URL = "https://pluviometric-heliaean-myla.ngrok-free.dev";
+const BACKEND_URL =
+  "https://pluviometric-heliaean-myla.ngrok-free.dev";
 
 console.log("BACKEND_URL =", BACKEND_URL);
 
 /* ================= TYPES ================= */
 
 export type ApiResponse<T = any> = {
-  ok?: boolean;
   success?: boolean;
   message?: string;
-  reason?: string;
   data?: T;
-  role?: "user" | "mechanic";
-  profile?: any;
+  requests?: any[];
 };
+/* =========================================================
+   EV SERVICE ROUTES
+========================================================= */
 
-/* ================= INTERNAL UTILS ================= */
+export function createEvRequestApi(data: any) {
+  return post<ApiResponse>("/api/ev/create", data);
+}
 
-const REQUEST_TIMEOUT = 20000; // 20 seconds
+export function acceptEvRequestApi(data: any) {
+  return post<ApiResponse>("/api/ev/accept", data);
+}
+
+export function updateEvMechanicLocationApi(data: any) {
+  return post<ApiResponse>("/api/ev/update-location", data);
+}
+
+export function cancelEvRequestApi(data: any) {
+  return post<ApiResponse>("/api/ev/cancel", data);
+}
+
+export function getEvRequestByIdApi(requestId: string) {
+  return get<ApiResponse>(`/api/ev/${requestId}`);
+}
+
+/* =========================================================
+   AUTH ROUTES
+========================================================= */
+
+/* ================= SEND OTP ================= */
+
+export function sendOtp(phone: string) {
+  return post<ApiResponse>("/api/auth/send-otp", {
+    phone,
+  });
+}
+
+/* ================= VERIFY OTP ================= */
+
+export function verifyOtp(
+  phone: string,
+  otp: string,
+  role: "user" | "mechanic",
+) {
+  return post<any>("/api/auth/verify-otp", {
+    phone,
+    otp,
+    role,
+  });
+}
+
+/* ================= INTERNAL ================= */
+
+const REQUEST_TIMEOUT = 20000;
 
 async function fetchWithTimeout(
   input: RequestInfo,
@@ -29,48 +75,42 @@ async function fetchWithTimeout(
   const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(input, {
+    return await fetch(input, {
       ...init,
       signal: controller.signal,
-      cache: "no-store", // 🔥 Android-safe
+      cache: "no-store",
     });
-    return res;
   } finally {
     clearTimeout(id);
   }
 }
 
-/* ================= CORE REQUESTS ================= */
+/* ================= CORE ================= */
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const url = `${BACKEND_URL}${path}`;
 
   console.log("➡️ POST", url, "Body:", body);
 
-  try {
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Connection: "close",
-      },
-      body: JSON.stringify(body),
-    });
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify(body),
+  });
 
-    const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
 
-    if (!res.ok) {
-      console.log("❌ API POST ERROR:", path, json);
-      throw new Error(json?.message || json?.reason || "Request failed");
-    }
-
-    return json as T;
-  } catch (err: any) {
-    console.log("❌ NETWORK POST ERROR:", path, err?.message || err);
-    throw err;
+  if (!res.ok) {
+    console.log("❌ API ERROR:", json);
+    throw new Error(json?.message || "Request failed");
   }
+
+  return json as T;
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -78,96 +118,31 @@ async function get<T>(path: string): Promise<T> {
 
   console.log("➡️ GET", url);
 
-  try {
-    const res = await fetchWithTimeout(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Connection: "close",
-      },
-    });
-
-    const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
-
-    if (!res.ok) {
-      console.log("❌ API GET ERROR:", path, json);
-      throw new Error(json?.message || "Request failed");
-    }
-
-    return json as T;
-  } catch (err: any) {
-    console.log("❌ NETWORK GET ERROR:", path, err?.message || err);
-    throw err;
-  }
-}
-
-/* ================= API OBJECT ================= */
-
-const api = {
-  get: <T>(
-    url: string,
-    config?: { params?: Record<string, any> },
-  ): Promise<T> => {
-    let path = url;
-    if (config?.params) {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(config.params)) {
-        params.append(key, String(value));
-      }
-      path += `?${params.toString()}`;
-    }
-    return get<T>(path);
-  },
-
-  post: <T>(url: string, body: unknown): Promise<T> => {
-    return post<T>(url, body);
-  },
-};
-
-export default api;
-
-/* ================= AUTH ================= */
-
-export function sendOtp(phone: string) {
-  return post<ApiResponse>("/api/auth/send-otp", { phone });
-}
-
-export function verifyOtp(
-  phone: string,
-  otp: string,
-  role: "user" | "mechanic",
-) {
-  return post<ApiResponse>("/api/auth/verify-otp", {
-    phone,
-    otp,
-    role,
+  const res = await fetchWithTimeout(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "ngrok-skip-browser-warning": "true",
+    },
   });
+
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+
+  if (!res.ok) {
+    console.log("❌ API ERROR:", json);
+    throw new Error(json?.message || "Request failed");
+  }
+
+  return json as T;
 }
 
-/* ================= MECHANIC ================= */
+/* =========================================================
+   SERVICE REQUEST ROUTES
+========================================================= */
 
-export function registerMechanic(data: {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  serviceTypes: string[];
-  roles?: string[];
-  vehicleTypes?: string[];
-  address: string;
-  aadhaar: string;
-  latitude: number;
-  longitude: number;
-}) {
-  return post<ApiResponse>("/api/mechanic/register", data);
-}
+/* ================= CREATE ================= */
 
-/* ================= SERVICE REQUESTS ================= */
-/**
- * 🔒 IMPORTANT:
- * We STANDARDIZE names here
- * Frontend → Backend mapping is explicit
- */
 export function createServiceRequest(data: {
   userPhone: string;
   service: string;
@@ -175,25 +150,70 @@ export function createServiceRequest(data: {
   userLat: number;
   userLng: number;
 }) {
-  return post<ApiResponse>("/api/service/request", {
+  return post<ApiResponse>("/api/service/create", {
     user_phone: data.userPhone,
     user_lat: data.userLat,
-    user_lng: data.userLng, // ✅ ONLY correct spelling
+    user_lng: data.userLng,
     service: data.service,
     vehicle_type: data.vehicleType,
   });
+}
+
+/* ================= GET BY ID (FOR POLLING) ================= */
+
+export function getServiceRequestByIdApi(requestId: string) {
+  return get<ApiResponse>(
+    `/api/service/${encodeURIComponent(requestId)}`
+  );
+}
+
+/* ================= CANCEL ================= */
+
+export function cancelServiceRequest(requestId: string) {
+  return post<ApiResponse>("/api/service/cancel", {
+    requestId,
+  });
+}
+
+/* ================= ACCEPT ================= */
+
+export function acceptServiceRequest(data: {
+  requestId: string;
+  mechanic_phone: string;
+  mechanic_lat?: number;
+  mechanic_lng?: number;
+}) {
+  return post<ApiResponse>("/api/service/accept", data);
+}
+
+/* ================= UPDATE LOCATION ================= */
+
+export function updateMechanicLocationApi(data: {
+  requestId: string;
+  mechanic_lat: number;
+  mechanic_lng: number;
+}) {
+  return post<ApiResponse>("/api/service/update-location", data);
+}
+
+/* ================= GET ACTIVE ================= */
+
+export function getActiveServiceRequests(mechanicPhone: string) {
+  return get<ApiResponse>(
+    `/api/service?mechanicPhone=${encodeURIComponent(mechanicPhone)}`
+  );
 }
 
 /* ================= HISTORY ================= */
 
 export function getUserHistory(phone: string) {
   return get<ApiResponse>(
-    `/api/service/user-history?phone=${encodeURIComponent(phone)}`,
+    `/api/service/user-history?phone=${encodeURIComponent(phone)}`
   );
 }
 
 export function getMechanicHistory(phone: string) {
   return get<ApiResponse>(
-    `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`,
+    `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`
   );
 }

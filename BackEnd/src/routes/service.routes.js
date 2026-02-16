@@ -5,8 +5,11 @@ const router = express.Router();
 
 const {
   createRequest,
+  cancelRequest,
   acceptRequest,
+  updateMechanicLocation,
   getActiveServiceRequests,
+  getServiceRequestByIdController,
   userHistory,
   mechanicHistory,
 } = require("../controllers/service.controller");
@@ -15,37 +18,41 @@ const {
 |--------------------------------------------------------------------------
 | SERVICE REQUEST ROUTES
 |--------------------------------------------------------------------------
-| Base path mounted in app.js as:
-| app.use("/service", serviceRoutes);
+| Mounted in app.js as:
+| app.use("/api/service", serviceRoutes);
 |--------------------------------------------------------------------------
 */
 
-/**
- * ================================
- * USER ROUTES
- * ================================
- */
+/* =====================================================
+   USER ROUTES
+===================================================== */
 
-// User creates a service request
+// Create request
 router.post("/create", createRequest);
 
-// User service history
+// Cancel request
+router.post("/cancel", cancelRequest);
+
+// User history (MUST come before /:id)
 router.get("/user-history", userHistory);
 
-/**
- * ================================
- * MECHANIC ROUTES
- * ================================
- */
+// Get single request by ID (FOR POLLING)
+router.get("/request/:id", getServiceRequestByIdController);
 
-// 🔴 MOST IMPORTANT ROUTE (THIS FIXES YOUR ERROR)
-// Get all pending requests + accepted request for this mechanic
+/* =====================================================
+   MECHANIC ROUTES
+===================================================== */
+
+// Get pending + accepted requests
 router.get("/", getActiveServiceRequests);
 
-// Mechanic accepts a request
+// Accept request
 router.post("/accept", acceptRequest);
 
-// Mechanic service history
+// Update live mechanic location
+router.post("/update-location", updateMechanicLocation);
+
+// Mechanic history
 router.get("/mechanic-history", mechanicHistory);
 
 module.exports = router;

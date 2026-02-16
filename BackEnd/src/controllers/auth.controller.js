@@ -11,7 +11,7 @@ const { info, error } = require("../utils/logger");
 
 /* ====================================================
    SEND OTP
-   ==================================================== */
+==================================================== */
 
 async function sendOtpHandler(req, res) {
   try {
@@ -19,7 +19,8 @@ async function sendOtpHandler(req, res) {
 
     if (!phone) {
       return res.status(400).json({
-        message: "phone is required in E.164 format (ex: +919876543210)",
+        ok: false,
+        message: "Phone is required in E.164 format (ex: +919876543210)",
       });
     }
 
@@ -28,6 +29,7 @@ async function sendOtpHandler(req, res) {
       await rateLimiter.consume(req.ip);
     } catch {
       return res.status(429).json({
+        ok: false,
         message: "Too many requests. Please try again later.",
       });
     }
@@ -43,16 +45,22 @@ async function sendOtpHandler(req, res) {
 
     info("[OTP] Sent to", phone);
 
-    return res.json({ ok: true, message: "OTP sent" });
+    return res.json({
+      ok: true,
+      message: "OTP sent successfully",
+    });
   } catch (err) {
     error("sendOtpHandler:", err.message);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+    });
   }
 }
 
 /* ====================================================
-   VERIFY OTP (ROLE + DB BASED)
-   ==================================================== */
+   VERIFY OTP
+==================================================== */
 
 async function verifyOtpHandler(req, res) {
   try {
@@ -60,12 +68,16 @@ async function verifyOtpHandler(req, res) {
 
     if (!phone || !otp || !role) {
       return res.status(400).json({
+        ok: false,
         message: "phone, otp and role are required",
       });
     }
 
     if (!["user", "mechanic"].includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
+      return res.status(400).json({
+        ok: false,
+        message: "Invalid role",
+      });
     }
 
     // Verify OTP
@@ -74,7 +86,7 @@ async function verifyOtpHandler(req, res) {
     if (!result.ok) {
       return res.status(400).json({
         ok: false,
-        reason: result.reason,
+        message: result.reason || "Invalid OTP",
       });
     }
 
@@ -86,7 +98,9 @@ async function verifyOtpHandler(req, res) {
       return res.json({
         ok: true,
         role: "user",
-        profile: { exists: true },
+        profile: {
+          exists: true,
+        },
       });
     }
 
@@ -101,29 +115,27 @@ async function verifyOtpHandler(req, res) {
       });
     }
 
-    info("[verifyOtpHandler] mechanic:", mechanic);
-
-    /**
-     * IMPORTANT:
-     * Appwrite schema uses `profile_completed` (snake_case)
-     */
     const isCompleted = mechanic.profile_completed === true;
 
-    info("[verifyOtpHandler] isCompleted:", isCompleted);
+    info("[verifyOtpHandler] mechanic:", mechanic.$id);
+    info("[verifyOtpHandler] profile_completed:", isCompleted);
 
     return res.json({
       ok: true,
-      message: "OTP verified",
       role: "mechanic",
+      message: "OTP verified successfully",
+      mechanicId: mechanic.$id,
       profile: {
         exists: true,
         completed: isCompleted,
       },
-      mechanicId: mechanic.$id, // send only ID (clean & safe)
     });
   } catch (err) {
     error("verifyOtpHandler:", err.message);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+    });
   }
 }
 

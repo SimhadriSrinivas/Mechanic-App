@@ -6,7 +6,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // Auth
 const KEY_PHONE = "auth_phone";
 const KEY_ROLE = "auth_role";
-const KEY_MECHANIC_PROFILE = "mechanic_profile_completed";
+const KEY_MECHANIC_PROFILE_COMPLETED = "mechanic_profile_completed";
+
+// 🔥 NEW → Mechanic profile data (name + phone etc.)
+const KEY_MECHANIC_PROFILE_DATA = "mechanic_profile_data";
 
 // Mechanic registration resume support
 const KEY_MECH_REG_STEP = "mechanic_reg_step";
@@ -28,6 +31,13 @@ export type StoredLocation = {
   timestamp: number;
 };
 
+export type StoredMechanicProfile = {
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  phone?: string;
+};
+
 /* ================= SAVE AUTH ================= */
 
 export async function saveLoggedInPhone(phone: string) {
@@ -38,11 +48,11 @@ export async function saveUserRole(role: UserRole) {
   await AsyncStorage.setItem(KEY_ROLE, role);
 }
 
-/**
- * Explicitly mark mechanic profile completion state
- */
 export async function saveMechanicProfileCompleted(value: boolean) {
-  await AsyncStorage.setItem(KEY_MECHANIC_PROFILE, value ? "true" : "false");
+  await AsyncStorage.setItem(
+    KEY_MECHANIC_PROFILE_COMPLETED,
+    value ? "true" : "false"
+  );
 }
 
 /* ================= GET AUTH ================= */
@@ -56,22 +66,51 @@ export async function getUserRole(): Promise<UserRole | null> {
   return role === "user" || role === "mechanic" ? role : null;
 }
 
-/**
- * Returns:
- * - true  → profile completed
- * - false → profile exists but not completed
- */
 export async function isMechanicProfileCompleted(): Promise<boolean> {
-  const value = await AsyncStorage.getItem(KEY_MECHANIC_PROFILE);
+  const value = await AsyncStorage.getItem(KEY_MECHANIC_PROFILE_COMPLETED);
   return value === "true";
 }
 
-/**
- * Returns true if mechanic profile flow has started
- */
 export async function hasMechanicProfileFlag(): Promise<boolean> {
-  const value = await AsyncStorage.getItem(KEY_MECHANIC_PROFILE);
+  const value = await AsyncStorage.getItem(KEY_MECHANIC_PROFILE_COMPLETED);
   return value !== null;
+}
+
+/* ================= 🔥 MECHANIC PROFILE DATA ================= */
+
+/**
+ * Save mechanic profile data (name + phone)
+ */
+export async function saveMechanicProfileData(
+  data: StoredMechanicProfile
+) {
+  await AsyncStorage.setItem(
+    KEY_MECHANIC_PROFILE_DATA,
+    JSON.stringify(data)
+  );
+}
+
+/**
+ * Get mechanic profile data
+ */
+export async function getMechanicProfileData(): Promise<StoredMechanicProfile | null> {
+  const raw = await AsyncStorage.getItem(KEY_MECHANIC_PROFILE_DATA);
+
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("Failed to parse mechanic profile data"); // 🔥 UPDATED (safe parsing)
+    return null;
+  }
+}
+
+/**
+ * Clear mechanic profile data
+ */
+export async function clearMechanicProfileData() {
+  await AsyncStorage.removeItem(KEY_MECHANIC_PROFILE_DATA);
 }
 
 /* ================= MECHANIC REGISTRATION STEP ================= */
@@ -109,16 +148,10 @@ export async function getMechanicFormDraft<T>(): Promise<T | null> {
 
 /* ================= MECHANIC DUTY (MAP) ================= */
 
-/**
- * Save mechanic ON / OFF duty status (temporary)
- */
 export async function saveMechanicDutyStatus(onDuty: boolean) {
   await AsyncStorage.setItem(KEY_MECH_DUTY_STATUS, JSON.stringify(onDuty));
 }
 
-/**
- * Get mechanic ON / OFF duty status
- */
 export async function getMechanicDutyStatus(): Promise<boolean | null> {
   const raw = await AsyncStorage.getItem(KEY_MECH_DUTY_STATUS);
   return raw ? JSON.parse(raw) : null;
@@ -126,9 +159,6 @@ export async function getMechanicDutyStatus(): Promise<boolean | null> {
 
 /* ================= MECHANIC LOCATION (MAP) ================= */
 
-/**
- * Save last known GOOD GPS fix (used to avoid jump on reload)
- */
 export async function saveLastMechanicLocation(location: StoredLocation) {
   await AsyncStorage.setItem(
     KEY_MECH_LAST_LOCATION,
@@ -136,44 +166,34 @@ export async function saveLastMechanicLocation(location: StoredLocation) {
   );
 }
 
-/**
- * Get last known GOOD GPS fix
- */
 export async function getLastMechanicLocation(): Promise<StoredLocation | null> {
   const raw = await AsyncStorage.getItem(KEY_MECH_LAST_LOCATION);
   return raw ? JSON.parse(raw) : null;
 }
 
-/**
- * Clear cached GPS location (optional)
- */
 export async function clearLastMechanicLocation() {
   await AsyncStorage.removeItem(KEY_MECH_LAST_LOCATION);
 }
 
 /* ================= RESET HELPERS ================= */
 
-/**
- * Clears only mechanic registration progress
- */
 export async function resetMechanicRegistration() {
   await AsyncStorage.multiRemove([
     KEY_MECH_REG_FORM,
     KEY_MECH_REG_STEP,
-    KEY_MECHANIC_PROFILE,
+    KEY_MECHANIC_PROFILE_COMPLETED,
+    KEY_MECHANIC_PROFILE_DATA, // 🔥 UPDATED (important fix)
   ]);
 }
 
 /* ================= CLEAR ALL (LOGOUT) ================= */
 
-/**
- * Clears ALL auth + mechanic + map related storage
- */
 export async function clearAuthStorage() {
   await AsyncStorage.multiRemove([
     KEY_PHONE,
     KEY_ROLE,
-    KEY_MECHANIC_PROFILE,
+    KEY_MECHANIC_PROFILE_COMPLETED,
+    KEY_MECHANIC_PROFILE_DATA, // 🔥 important
     KEY_MECH_REG_STEP,
     KEY_MECH_REG_FORM,
     KEY_MECH_DUTY_STATUS,

@@ -7,28 +7,48 @@ const { info, error } = require("../utils/logger");
 let client = null;
 let databases = null;
 
-/* ================= APPWRITE CLIENT ================= */
+/* ====================================================
+   APPWRITE CLIENT INITIALIZATION
+==================================================== */
 
-if (
-  config.appwrite.endpoint &&
-  config.appwrite.projectId &&
-  config.appwrite.apiKey
-) {
-  client = new Client()
-    .setEndpoint(config.appwrite.endpoint)
-    .setProject(config.appwrite.projectId)
-    .setKey(config.appwrite.apiKey);
+try {
+  if (
+    config.appwrite.endpoint &&
+    config.appwrite.projectId &&
+    config.appwrite.apiKey
+  ) {
+    client = new Client()
+      .setEndpoint(config.appwrite.endpoint)
+      .setProject(config.appwrite.projectId)
+      .setKey(config.appwrite.apiKey);
 
-  databases = new Databases(client);
-  info("Appwrite connected");
+    databases = new Databases(client);
+    info("✅ Appwrite connected");
+  } else {
+    error("❌ Appwrite configuration missing");
+  }
+} catch (err) {
+  error("❌ Failed to initialize Appwrite:", err.message);
+}
+
+/* ====================================================
+   SAFETY CHECK
+==================================================== */
+
+function ensureDatabase() {
+  if (!databases) {
+    error("❌ Database not initialized");
+    return false;
+  }
+  return true;
 }
 
 /* ====================================================
    USER LOGIN
-   ==================================================== */
+==================================================== */
 
 async function saveUserLogin(phone) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const existing = await databases.listDocuments(
@@ -54,14 +74,11 @@ async function saveUserLogin(phone) {
 }
 
 /* ====================================================
-   MECHANIC PROFILE (VIEW + EDIT)
-   ==================================================== */
+   MECHANIC PROFILE
+==================================================== */
 
-/**
- * Get mechanic profile by phone
- */
 async function getMechanicByPhone(phone) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const res = await databases.listDocuments(
@@ -77,11 +94,8 @@ async function getMechanicByPhone(phone) {
   }
 }
 
-/**
- * Create mechanic on first login
- */
 async function saveMechanicLogin(phone) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const existing = await getMechanicByPhone(phone);
@@ -102,18 +116,13 @@ async function saveMechanicLogin(phone) {
   }
 }
 
-/**
- * Update mechanic profile (EDITABLE BY USER)
- * 🔒 Only allowed fields are updated
- */
 async function updateMechanicProfile(phone, data) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const mechanic = await getMechanicByPhone(phone);
     if (!mechanic) return null;
 
-    // 🔒 Allow ONLY these fields to be edited
     const allowedFields = {
       Name: data.Name,
       Address: data.Address,
@@ -124,7 +133,6 @@ async function updateMechanicProfile(phone, data) {
       Aadhaar_Number: data.Aadhaar_Number,
     };
 
-    // Remove undefined values
     Object.keys(allowedFields).forEach(
       (key) => allowedFields[key] === undefined && delete allowedFields[key]
     );
@@ -141,11 +149,8 @@ async function updateMechanicProfile(phone, data) {
   }
 }
 
-/**
- * Mark profile completed
- */
 async function markMechanicProfileCompleted(phone) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const mechanic = await getMechanicByPhone(phone);
@@ -165,21 +170,27 @@ async function markMechanicProfileCompleted(phone) {
 
 /* ====================================================
    SERVICE REQUESTS
-   ==================================================== */
+==================================================== */
 
 async function createServiceRequest(data) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     const document = {
       user_phone: data.user_phone,
       user_lat: data.user_lat,
       user_lng: data.user_lng,
+      service: data.service,
+      vehicle_type: data.vehicle_type,
+      status: data.status ?? "pending",
       mechanic_phone: data.mechanic_phone ?? null,
       mechanic_lat: data.mechanic_lat ?? null,
       mechanic_lng: data.mechanic_lng ?? null,
-      status: "pending",
-      createdAt: data.createdAt,
+      acceptedAt: data.acceptedAt ?? null,
+      call_started_at: data.call_started_at ?? null,
+      call_completed_at: data.call_completed_at ?? null,
+      cancelled_by: data.cancelled_by ?? null,
+      amount: data.amount ?? null,
     };
 
     info("📦 Creating service request:", document);
@@ -196,17 +207,30 @@ async function createServiceRequest(data) {
   }
 }
 
-async function getAllServiceRequests() {
-  if (!databases) return null;
+/* ====================================================
+   GET ALL REQUESTS (IMPORTANT FIX)
+==================================================== */
 
-  return databases.listDocuments(
-    config.appwrite.databaseId,
-    config.appwrite.serviceRequestCollectionId
-  );
+async function getAllServiceRequests() {
+  if (!ensureDatabase()) return { documents: [] };
+
+  try {
+    return await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.serviceRequestCollectionId,
+      [
+        Query.limit(100),                 // 🔥 allow more than default 25
+        Query.orderDesc("$createdAt"),    // 🔥 latest first
+      ]
+    );
+  } catch (err) {
+    error("getAllServiceRequests:", err.message);
+    return { documents: [] };
+  }
 }
 
 async function getServiceRequestById(requestId) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     return await databases.getDocument(
@@ -214,13 +238,14 @@ async function getServiceRequestById(requestId) {
       config.appwrite.serviceRequestCollectionId,
       requestId
     );
-  } catch {
+  } catch (err) {
+    error("getServiceRequestById:", err.message);
     return null;
   }
 }
 
 async function updateServiceRequest(requestId, data) {
-  if (!databases) return null;
+  if (!ensureDatabase()) return null;
 
   try {
     return await databases.updateDocument(
@@ -236,34 +261,53 @@ async function updateServiceRequest(requestId, data) {
 }
 
 async function getUserHistory(phone) {
-  return databases.listDocuments(
-    config.appwrite.databaseId,
-    config.appwrite.serviceRequestCollectionId,
-    [Query.equal("user_phone", phone)]
-  );
+  if (!ensureDatabase()) return { documents: [] };
+
+  try {
+    return await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.serviceRequestCollectionId,
+      [
+        Query.equal("user_phone", phone),
+        Query.limit(100),
+        Query.orderDesc("$createdAt"),
+      ]
+    );
+  } catch (err) {
+    error("getUserHistory:", err.message);
+    return { documents: [] };
+  }
 }
 
 async function getMechanicHistory(phone) {
-  return databases.listDocuments(
-    config.appwrite.databaseId,
-    config.appwrite.serviceRequestCollectionId,
-    [Query.equal("mechanic_phone", phone)]
-  );
+  if (!ensureDatabase()) return { documents: [] };
+
+  try {
+    return await databases.listDocuments(
+      config.appwrite.databaseId,
+      config.appwrite.serviceRequestCollectionId,
+      [
+        Query.equal("mechanic_phone", phone),
+        Query.limit(100),
+        Query.orderDesc("$createdAt"),
+      ]
+    );
+  } catch (err) {
+    error("getMechanicHistory:", err.message);
+    return { documents: [] };
+  }
 }
 
-/* ================= EXPORTS ================= */
+/* ====================================================
+   EXPORTS
+==================================================== */
 
 module.exports = {
-  // User
   saveUserLogin,
-
-  // Mechanic
   saveMechanicLogin,
   getMechanicByPhone,
   updateMechanicProfile,
   markMechanicProfileCompleted,
-
-  // Service Requests
   createServiceRequest,
   getAllServiceRequests,
   getServiceRequestById,
