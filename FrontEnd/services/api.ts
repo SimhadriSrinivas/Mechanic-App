@@ -13,6 +13,7 @@ export type ApiResponse<T = any> = {
   data?: T;
   requests?: any[];
 };
+
 /* =========================================================
    EV SERVICE ROUTES
 ========================================================= */
@@ -41,15 +42,11 @@ export function getEvRequestByIdApi(requestId: string) {
    AUTH ROUTES
 ========================================================= */
 
-/* ================= SEND OTP ================= */
-
 export function sendOtp(phone: string) {
   return post<ApiResponse>("/api/auth/send-otp", {
     phone,
   });
 }
-
-/* ================= VERIFY OTP ================= */
 
 export function verifyOtp(
   phone: string,
@@ -61,80 +58,6 @@ export function verifyOtp(
     otp,
     role,
   });
-}
-
-/* ================= INTERNAL ================= */
-
-const REQUEST_TIMEOUT = 20000;
-
-async function fetchWithTimeout(
-  input: RequestInfo,
-  init: RequestInit,
-): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-      cache: "no-store",
-    });
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-/* ================= CORE ================= */
-
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const url = `${BACKEND_URL}${path}`;
-
-  console.log("➡️ POST", url, "Body:", body);
-
-  const res = await fetchWithTimeout(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "ngrok-skip-browser-warning": "true",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
-
-  if (!res.ok) {
-    console.log("❌ API ERROR:", json);
-    throw new Error(json?.message || "Request failed");
-  }
-
-  return json as T;
-}
-
-async function get<T>(path: string): Promise<T> {
-  const url = `${BACKEND_URL}${path}`;
-
-  console.log("➡️ GET", url);
-
-  const res = await fetchWithTimeout(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      "ngrok-skip-browser-warning": "true",
-    },
-  });
-
-  const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
-
-  if (!res.ok) {
-    console.log("❌ API ERROR:", json);
-    throw new Error(json?.message || "Request failed");
-  }
-
-  return json as T;
 }
 
 /* =========================================================
@@ -160,10 +83,11 @@ export function createServiceRequest(data: {
 }
 
 /* ================= GET BY ID (FOR POLLING) ================= */
+/* 🔥 FIXED HERE */
 
 export function getServiceRequestByIdApi(requestId: string) {
   return get<ApiResponse>(
-    `/api/service/${encodeURIComponent(requestId)}`
+    `/api/service/request/${encodeURIComponent(requestId)}`
   );
 }
 
@@ -216,4 +140,78 @@ export function getMechanicHistory(phone: string) {
   return get<ApiResponse>(
     `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`
   );
+}
+
+/* =========================================================
+   INTERNAL CORE
+========================================================= */
+
+const REQUEST_TIMEOUT = 20000;
+
+async function fetchWithTimeout(
+  input: RequestInfo,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const url = `${BACKEND_URL}${path}`;
+
+  console.log("➡️ POST", url, "Body:", body);
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+
+  if (!res.ok) {
+    console.log("❌ API ERROR:", json);
+    throw new Error(json?.message || "Request failed");
+  }
+
+  return json as T;
+}
+
+async function get<T>(path: string): Promise<T> {
+  const url = `${BACKEND_URL}${path}`;
+
+  console.log("➡️ GET", url);
+
+  const res = await fetchWithTimeout(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "ngrok-skip-browser-warning": "true",
+    },
+  });
+
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+
+  if (!res.ok) {
+    console.log("❌ API ERROR:", json);
+    throw new Error(json?.message || "Request failed");
+  }
+
+  return json as T;
 }

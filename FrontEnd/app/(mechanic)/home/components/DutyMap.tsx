@@ -11,7 +11,7 @@ import {
 import * as Location from "expo-location";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
-import { getLastLocation, saveLastLocation } from "@/utils/mapStorage";
+import { saveLastLocation } from "@/utils/mapStorage";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -42,11 +42,15 @@ export default function DutyMap({ acceptedRequest }: Props) {
 
   /* ================= ICON LOAD ================= */
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       const asset = Asset.fromModule(
         require("../../../../assets/images/Mechnaic-icon.webp")
       );
       await asset.downloadAsync();
+
+      if (!mounted) return;
 
       if (Platform.OS === "web") {
         setIconBase64(asset.uri);
@@ -57,6 +61,10 @@ export default function DutyMap({ acceptedRequest }: Props) {
         setIconBase64(`data:image/webp;base64,${base64}`);
       }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /* ================= GPS ================= */
@@ -64,74 +72,103 @@ export default function DutyMap({ acceptedRequest }: Props) {
     let active = true;
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
 
-      const quick = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const first: Coords = {
-        latitude: quick.coords.latitude,
-        longitude: quick.coords.longitude,
-        heading: quick.coords.heading ?? 0,
-        timestamp: Date.now(),
-      };
-
-      setCoords(first);
-      lastGoodRef.current = first;
-      await saveLastLocation(first);
-      setLoading(false);
-
-      watchRef.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 3000,
-          distanceInterval: 5,
-        },
-        async (loc) => {
-          if (!active) return;
-
-          const next: Coords = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            heading: loc.coords.heading ?? 0,
-            timestamp: Date.now(),
-          };
-
-          setCoords(next);
-          lastGoodRef.current = next;
-          await saveLastLocation(next);
-
-          /* 🔥 SEND LIVE LOCATION TO BACKEND */
-          if (acceptedRequest && API_URL) {
-            fetch(`${API_URL}/api/service/update-location`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true",
-              },
-              body: JSON.stringify({
-                requestId: acceptedRequest.$id,
-                mechanic_lat: next.latitude,
-                mechanic_lng: next.longitude,
-              }),
-            }).catch(() => {});
-          }
+        if (status !== "granted") {
+          setLoading(false);
+          return;
         }
-      );
+
+        const quick = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const first: Coords = {
+          latitude: quick.coords.latitude,
+          longitude: quick.coords.longitude,
+          heading: quick.coords.heading ?? 0,
+          timestamp: Date.now(),
+        };
+
+        if (!active) return;
+
+        setCoords(first);
+        lastGoodRef.current = first;
+        await saveLastLocation(first);
+        setLoading(false);
+
+        // 🔥 Start watching
+        watchRef.current = await Location.watchPositionAsync(
+          {
+            accuracy:
+              Platform.OS === "web"
+                ? Location.Accuracy.Balanced
+                : Location.Accuracy.BestForNavigation,
+            timeInterval: 3000,
+            distanceInterval: 5,
+          },
+          async (loc) => {
+            if (!active) return;
+
+            const next: Coords = {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              heading: loc.coords.heading ?? 0,
+              timestamp: Date.now(),
+            };
+
+            setCoords(next);
+            lastGoodRef.current = next;
+            await saveLastLocation(next);
+
+            // 🔥 Send live location
+            if (acceptedRequest && API_URL) {
+              fetch(`${API_URL}/api/service/update-location`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "ngrok-skip-browser-warning": "true",
+                },
+                body: JSON.stringify({
+                  requestId: acceptedRequest.$id,
+                  mechanic_lat: next.latitude,
+                  mechanic_lng: next.longitude,
+                }),
+              }).catch(() => {});
+            }
+          }
+        );
+      } catch (err) {
+        console.log("GPS Error:", err);
+        setLoading(false);
+      }
     })();
 
     return () => {
       active = false;
-      watchRef.current?.remove();
+
+      // ✅ SAFE CLEANUP FOR ALL PLATFORMS
+      try {
+        if (
+          watchRef.current &&
+          typeof watchRef.current.remove === "function"
+        ) {
+          watchRef.current.remove();
+        }
+      } catch {
+        // Ignore web emitter issue
+      }
+
+      watchRef.current = null;
     };
   }, [acceptedRequest]);
 
   /* ================= MAP HTML ================= */
   const mapHtml =
-  coords && iconBase64
-    ? `
+    coords && iconBase64
+      ? `
 <!DOCTYPE html>
 <html>
 <head>
@@ -204,8 +241,7 @@ L.Routing.control({
 </body>
 </html>
 `
-    : "";
-
+      : "";
 
   if (loading || !coords || !iconBase64) {
     return (

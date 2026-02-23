@@ -18,13 +18,13 @@ export default function WaitingScreen() {
   const { requestId } = params as { requestId?: string };
   const router = useRouter();
 
-  const pollingRef = useRef<NodeJS.Timeout | number | null>(null);
+  const pollingRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!requestId) return;
 
-    console.log("🔁 Starting polling for request:", requestId);
+    console.log("Starting polling for request:", requestId);
 
     const poll = async () => {
       try {

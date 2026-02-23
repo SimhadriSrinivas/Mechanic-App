@@ -1,6 +1,4 @@
-// app/(tabs)/service/tracking.tsx
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   ActivityIndicator,
@@ -16,9 +14,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { createRequest } from "@/services/requests";
 import { getLoggedInPhone } from "@/utils/storage";
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 export default function Tracking() {
   const router = useRouter();
   const { vehicleType } = useLocalSearchParams<{ vehicleType?: string }>();
+
+  const webViewRef = useRef<any>(null);
+  const intervalRef = useRef<any>(null);
 
   const [coords, setCoords] = useState<{
     latitude: number;
@@ -33,14 +36,10 @@ export default function Tracking() {
 
     (async () => {
       try {
-        const { status } =
-          await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
 
         if (status !== "granted") {
-          Alert.alert(
-            "Permission required",
-            "Location permission is needed"
-          );
+          Alert.alert("Permission required", "Location permission is needed");
           return;
         }
 
@@ -55,19 +54,85 @@ export default function Tracking() {
           longitude: loc.coords.longitude,
         });
       } catch (err) {
-        Alert.alert("Error", "Failed to fetch location");
+        Alert.alert("Error", "Failed to get location");
       }
     })();
 
     return () => {
       mounted = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
+ /* ================= FETCH NEARBY MECHANICS (ROLE BASED) ================= */
+useEffect(() => {
+  if (!coords || !vehicleType) return;
+
+  const roleMap: Record<string, string> = {
+    bike: "Bike Mechanic",
+    car: "Car Mechanic",
+    auto: "Auto Mechanic",
+    truck: "Truck Mechanic",
+  };
+
+  const selectedRole = roleMap[vehicleType];
+
+  if (!selectedRole) {
+    console.log("Invalid vehicleType:", vehicleType);
+    return;
+  }
+
+  const fetchNearby = async () => {
+    try {
+      const url = `${API_URL}/api/mechanic/nearby?lat=${coords.latitude}&lng=${coords.longitude}&role=${encodeURIComponent(
+        selectedRole
+      )}&radius=10&_=${Date.now()}`;
+
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      const text = await res.text();
+
+      // 🔥 Prevent crash if backend returns HTML (ngrok issue)
+      if (!text.startsWith("{")) {
+        console.log("Invalid JSON response:", text);
+        return;
+      }
+
+      const data = JSON.parse(text);
+
+      if (data.success && webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          updateMechanics(${JSON.stringify(data.mechanics || [])});
+          true;
+        `);
+      }
+    } catch (err) {
+      console.log("Nearby fetch error:", err);
+    }
+  };
+
+  // First call immediately
+  fetchNearby();
+
+  // Then repeat every 3 seconds
+  intervalRef.current = setInterval(fetchNearby, 3000);
+
+  return () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  };
+}, [coords, vehicleType]);
   /* ================= SEND SERVICE REQUEST ================= */
   const sendRequest = async () => {
     try {
-      if (loading) return; // prevent double tap
+      if (loading) return;
 
       setLoading(true);
 
@@ -123,14 +188,17 @@ export default function Tracking() {
 
 <style>
 html,body,#map{height:100%;margin:0}
-.leaflet-div-icon{
-  background:transparent !important;
-  border:none !important;
-}
 .user-marker{
   width:18px;
   height:18px;
   background:#007bff;
+  border-radius:50%;
+  border:3px solid white;
+}
+.mechanic-marker{
+  width:16px;
+  height:16px;
+  background:#e74c3c;
   border-radius:50%;
   border:3px solid white;
 }
@@ -144,19 +212,40 @@ html,body,#map{height:100%;margin:0}
 let map = L.map('map',{
   zoomControl:false,
   attributionControl:false
-}).setView([${coords.latitude}, ${coords.longitude}], 17);
+}).setView([${coords.latitude}, ${coords.longitude}], 15);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:19
 }).addTo(map);
 
-let icon = L.divIcon({
+let userIcon = L.divIcon({
   html:'<div class="user-marker"></div>',
   iconSize:[18,18],
   className:''
 });
 
-L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
+L.marker([${coords.latitude}, ${coords.longitude}],{icon:userIcon}).addTo(map);
+
+let mechanicMarkers = [];
+
+function updateMechanics(mechanics) {
+
+  mechanicMarkers.forEach(m => map.removeLayer(m));
+  mechanicMarkers = [];
+
+  mechanics.forEach(m => {
+    if(!m.latitude || !m.longitude) return;
+
+    let icon = L.divIcon({
+      html:'<div class="mechanic-marker"></div>',
+      iconSize:[16,16],
+      className:''
+    });
+
+    const marker = L.marker([m.latitude, m.longitude],{icon}).addTo(map);
+    mechanicMarkers.push(marker);
+  });
+}
 </script>
 </body>
 </html>
@@ -164,8 +253,6 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ================= MAP ================= */}
-
       {Platform.OS === "web" ? (
         <iframe
           srcDoc={mapHtml}
@@ -176,6 +263,7 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
           const { WebView } = require("react-native-webview");
           return (
             <WebView
+              ref={webViewRef}
               source={{ html: mapHtml }}
               javaScriptEnabled
               domStorageEnabled
@@ -187,7 +275,6 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
         })()
       )}
 
-      {/* ================= BOTTOM ACTION ================= */}
       <View style={styles.bottomSheet}>
         <TouchableOpacity
           style={styles.button}
@@ -204,8 +291,6 @@ L.marker([${coords.latitude}, ${coords.longitude}],{icon}).addTo(map);
     </View>
   );
 }
-
-/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   bottomSheet: {

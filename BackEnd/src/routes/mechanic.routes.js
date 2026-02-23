@@ -7,17 +7,25 @@ const {
   registerMechanic,
   getMechanicProfile,
   updateMechanicProfileController,
+  updateDutyStatus, 
+  getNearbyMechanics, 
 } = require("../controllers/mechanic.controller");
 
 /* ================= ROUTES ================= */
 
-// Register / complete profile
+// 🔹 Register / complete profile
 router.post("/register", registerMechanic);
 
-// Get profile
+// 🔹 Get mechanic profile
 router.get("/profile", getMechanicProfile);
 
-// Update profile (edit)
+// 🔹 Update mechanic profile (edit)
 router.put("/profile", updateMechanicProfileController);
+
+// 🔹 Update duty status (OnDuty / OffDuty)
+router.put("/duty", updateDutyStatus);
+
+router.get("/nearby", getNearbyMechanics);
+
 
 module.exports = router;

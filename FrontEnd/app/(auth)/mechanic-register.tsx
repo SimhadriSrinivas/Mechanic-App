@@ -21,7 +21,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { registerMechanic } from "../../services/api";
+import { registerMechanic } from "../../services/mechanicApi";
 import { saveMechanicProfileData } from "../../utils/storage";
 
 /* ================= OPTIONS ================= */
@@ -180,6 +180,7 @@ export default function MechanicRegister() {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
       });
+
       await saveMechanicProfileData({
         firstName,
         lastName,

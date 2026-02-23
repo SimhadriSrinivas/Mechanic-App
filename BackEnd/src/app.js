@@ -9,20 +9,31 @@ const mechanicRoutes = require("./routes/mechanic.routes");
 const serviceRoutes = require("./routes/service.routes");
 
 const app = express();
-
+app.disable("etag");
 /* =====================================================
    SECURITY MIDDLEWARE
 ===================================================== */
 
 app.use(helmet());
 
+/* =====================================================
+   CORS CONFIG (FIXED FOR WEB + NGROK)
+===================================================== */
+
 app.use(
   cors({
-    origin: "*", // ⚠ Change in production
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type"],
+    origin: "*", // Allow all for development
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "ngrok-skip-browser-warning",
+    ],
   })
 );
+
+/* Handle preflight explicitly */
+app.options("*", cors());
 
 app.use(express.json({ limit: "10mb" }));
 

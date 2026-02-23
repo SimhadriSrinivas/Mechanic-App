@@ -45,20 +45,19 @@ export default function SendRequest() {
       };
 
       // 🔍 Debug log (temporary – helps confirm correctness)
-      console.log("📤 Final payload sent:", payload);
+      console.log("Final payload sent:", payload);
 
       // 5️⃣ Send request to backend
       await createRequest(payload);
 
       Alert.alert("Request Sent", "A mechanic will reach you soon");
     } catch (err) {
-      console.error("❌ sendRequest error:", err);
+      console.error("sendRequest error:", err);
       Alert.alert("Error", "Failed to send request");
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Vehicle Breakdown?</Text>
@@ -78,7 +77,6 @@ export default function SendRequest() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

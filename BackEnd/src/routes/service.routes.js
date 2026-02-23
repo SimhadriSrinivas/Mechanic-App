@@ -27,32 +27,33 @@ const {
    USER ROUTES
 ===================================================== */
 
-// Create request
+// ✅ Create new service request
 router.post("/create", createRequest);
 
-// Cancel request
+// ✅ Cancel service request
 router.post("/cancel", cancelRequest);
 
-// User history (MUST come before /:id)
+// ✅ Get specific request by ID (Polling)
+router.get("/request/:id", getServiceRequestByIdController);
+
+// ✅ Get user service history
 router.get("/user-history", userHistory);
 
-// Get single request by ID (FOR POLLING)
-router.get("/request/:id", getServiceRequestByIdController);
 
 /* =====================================================
    MECHANIC ROUTES
 ===================================================== */
 
-// Get pending + accepted requests
-router.get("/", getActiveServiceRequests);
-
-// Accept request
+// ✅ Accept a pending request
 router.post("/accept", acceptRequest);
 
-// Update live mechanic location
+// ✅ Update live mechanic GPS location
 router.post("/update-location", updateMechanicLocation);
 
-// Mechanic history
+// ✅ Get mechanic history
 router.get("/mechanic-history", mechanicHistory);
+
+// ✅ Get active service requests (KEEP LAST GET ROUTE)
+router.get("/", getActiveServiceRequests);
 
 module.exports = router;

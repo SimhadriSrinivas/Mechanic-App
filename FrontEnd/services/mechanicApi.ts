@@ -1,25 +1,72 @@
-import { databases } from "./appwriteClient";
-import { ID } from "appwrite";
+/* =====================================================
+   MECHANIC SERVICE (BACKEND ONLY VERSION)
+   All operations go through Express backend
+===================================================== */
 
-/* ================= CONFIG ================= */
-export const DATABASE_ID = "692d76ce00304286ce3d";
-export const MECHANICS_COLLECTION_ID = "mechanic_rigistr";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 /* ================= TYPES ================= */
+
 export interface MechanicPayload {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-  Role: string[];              // Bike Mechanic, Car Mechanic etc
-  TypeOfVehicle: string[];     // Normal / EV
-  Address: string;
-  Aadhaar_Number: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  serviceTypes: string[];
+  roles: string[];
+  vehicleTypes: string[];
+  address: string;
+  aadhaar: string;
   latitude: number;
   longitude: number;
-  profile_completed?: boolean;
 }
 
-/* ================= UPDATE LIVE LOCATION (Optimized) ================= */
+export type DutyState = "OnDuty" | "OffDuty";
+
+/* =====================================================
+   UPDATE DUTY STATUS (NEW - FIXED)
+===================================================== */
+
+export const updateDutyStatus = async (
+  phone: string,
+  state: DutyState
+) => {
+  try {
+    if (!API_URL) {
+      console.error("API_URL is not defined");
+      return false;
+    }
+
+    const res = await fetch(`${API_URL}/api/mechanic/duty`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify({
+        phone,
+        state,
+      }),
+    });
+
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!res.ok) {
+      console.error("Duty API Error:", data);
+      throw new Error(data?.message || "Duty update failed");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Failed to update duty status:", error);
+    return false;
+  }
+};
+
+/* =====================================================
+   UPDATE MECHANIC LIVE LOCATION
+===================================================== */
+
 export const updateMechanicLocation = async (
   mechanicId: string,
   latitude: number,
@@ -27,106 +74,143 @@ export const updateMechanicLocation = async (
   heading?: number
 ) => {
   try {
-    // Validate coordinates
-    if (!mechanicId || typeof latitude !== 'number' || typeof longitude !== 'number') {
-      console.warn('Invalid location data:', { mechanicId, latitude, longitude });
+    if (!API_URL) {
+      console.error("API_URL is not defined");
       return null;
     }
 
-    // Normalize coordinates
-    const normalizedLat = Number(latitude.toFixed(6));
-    const normalizedLng = Number(longitude.toFixed(6));
-    const normalizedHeading = heading !== undefined ? Number(heading.toFixed(1)) : 0;
-
-    // Check if coordinates are valid
-    if (isNaN(normalizedLat) || isNaN(normalizedLng)) {
-      console.warn('NaN coordinates detected');
-      return null;
-    }
-
-    // Update in Appwrite
-    const result = await databases.updateDocument(
-      DATABASE_ID,
-      MECHANICS_COLLECTION_ID,
-      mechanicId,
-      {
-        latitude: normalizedLat,
-        longitude: normalizedLng,
-        heading: normalizedHeading,
-        lastLocationUpdate: new Date().toISOString(),
-      }
-    );
-
-    console.log('Location updated successfully:', {
-      id: mechanicId,
-      lat: normalizedLat,
-      lng: normalizedLng,
-      heading: normalizedHeading,
+    const res = await fetch(`${API_URL}/api/mechanic/location`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify({
+        mechanicId,
+        latitude,
+        longitude,
+        heading,
+      }),
     });
 
-    return result;
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!res.ok || !data.success) {
+      throw new Error(data?.message || "Location update failed");
+    }
+
+    return data.data;
   } catch (error) {
-    console.error('Failed to update mechanic location:', error);
-    
-    // Don't throw - fail gracefully
+    console.error("Failed to update mechanic location:", error);
     return null;
   }
 };
 
-/* ================= GET MECHANIC ================= */
+/* =====================================================
+   GET MECHANIC BY ID
+===================================================== */
+
 export const getMechanicById = async (mechanicId: string) => {
   try {
-    return await databases.getDocument(
-      DATABASE_ID,
-      MECHANICS_COLLECTION_ID,
-      mechanicId
+    if (!API_URL) {
+      console.error("API_URL is not defined");
+      return null;
+    }
+
+    const res = await fetch(
+      `${API_URL}/api/mechanic/${mechanicId}`,
+      {
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+      }
     );
+
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!res.ok || !data.success) {
+      throw new Error(data?.message || "Fetch mechanic failed");
+    }
+
+    return data.data;
   } catch (error) {
-    console.error('Failed to get mechanic:', error);
+    console.error("Failed to get mechanic:", error);
     return null;
   }
 };
 
-/* ================= REGISTER MECHANIC ================= */
-export const registerMechanic = async (data: MechanicPayload) => {
+/* =====================================================
+   REGISTER MECHANIC
+===================================================== */
+
+export const registerMechanic = async (
+  payload: MechanicPayload
+) => {
   try {
-    return await databases.createDocument(
-      DATABASE_ID,
-      MECHANICS_COLLECTION_ID,
-      ID.unique(),
-      {
-        Name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
-        Phone: data.phone || '',
-        Role: data.Role,
-        TypeOfVehicle: data.TypeOfVehicle,
-        Address: data.Address,
-        Aadhaar_Number: data.Aadhaar_Number,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        profile_completed: false,
-        createdAt: new Date().toISOString(),
-      }
-    );
+    if (!API_URL) {
+      throw new Error("API_URL not defined");
+    }
+
+    const res = await fetch(`${API_URL}/api/mechanic/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!res.ok || !data.success) {
+      throw new Error(data?.message || "Registration failed");
+    }
+
+    return data.data;
   } catch (error) {
-    console.error('Failed to register mechanic:', error);
+    console.error("Failed to register mechanic:", error);
     throw error;
   }
 };
 
-/* ================= COMPLETE PROFILE ================= */
-export const markProfileCompleted = async (mechanicId: string) => {
+/* =====================================================
+   MARK PROFILE COMPLETED
+===================================================== */
+
+export const markProfileCompleted = async (
+  mechanicId: string
+) => {
   try {
-    return await databases.updateDocument(
-      DATABASE_ID,
-      MECHANICS_COLLECTION_ID,
-      mechanicId,
+    if (!API_URL) {
+      console.error("API_URL is not defined");
+      return null;
+    }
+
+    const res = await fetch(
+      `${API_URL}/api/mechanic/profile-complete`,
       {
-        profile_completed: true,
-        profileCompletedAt: new Date().toISOString(),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ mechanicId }),
       }
     );
+
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!res.ok || !data.success) {
+      throw new Error(data?.message || "Profile update failed");
+    }
+
+    return data.data;
   } catch (error) {
-    console.error('Failed to mark profile completed:', error);
+    console.error("Failed to mark profile completed:", error);
     return null;
   }
 };

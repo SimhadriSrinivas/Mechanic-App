@@ -4,10 +4,17 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import React, { createContext, useState } from "react";
+import React, { createContext, useState, useEffect } from "react";
 import { useRouter } from "expo-router";
+
+import { getLoggedInPhone } from "@/utils/storage";
+import { updateDutyStatus } from "@/services/mechanicApi";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export const DutyContext = createContext<{
   onDuty: boolean;
@@ -19,11 +26,90 @@ export const DutyContext = createContext<{
 
 export default function MechanicLayout() {
   const [onDuty, setOnDuty] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const router = useRouter();
 
-  const toggleDuty = () => {
-    setOnDuty((prev) => !prev);
+  /* ================= LOAD DUTY STATE FROM BACKEND ================= */
+
+  useEffect(() => {
+    const loadDutyState = async () => {
+      try {
+        const phone = await getLoggedInPhone();
+        if (!phone || !API_URL) {
+          setInitialLoading(false);
+          return;
+        }
+
+        const res = await fetch(
+          `${API_URL}/api/mechanic/profile?phone=${phone}`,
+          {
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+            },
+          }
+        );
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          setOnDuty(data.data.state === "OnDuty");
+        }
+      } catch (err) {
+        console.log("Load duty error:", err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    loadDutyState();
+  }, []);
+
+  /* ================= TOGGLE DUTY ================= */
+
+  const toggleDuty = async () => {
+    if (loading) return;
+
+    try {
+      setLoading(true);
+
+      const phone = await getLoggedInPhone();
+      if (!phone) {
+        Alert.alert("Error", "Mechanic not logged in");
+        return;
+      }
+
+      const newState = onDuty ? "OffDuty" : "OnDuty";
+
+      const success = await updateDutyStatus(phone, newState);
+
+      if (!success) {
+        Alert.alert("Error", "Failed to update duty status");
+        return;
+      }
+
+      setOnDuty(newState === "OnDuty");
+    } catch (err) {
+      console.log("Duty toggle error:", err);
+      Alert.alert("Error", "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  /* ================= WAIT FOR INITIAL LOAD ================= */
+
+  if (initialLoading) {
+    return (
+      <>
+        <StatusBar style="dark" backgroundColor="#ffffff" />
+        <ActivityIndicator
+          style={{ flex: 1, alignSelf: "center" }}
+          size="large"
+        />
+      </>
+    );
+  }
 
   return (
     <DutyContext.Provider value={{ onDuty, toggleDuty }}>
@@ -40,7 +126,7 @@ export default function MechanicLayout() {
           },
           headerTintColor: "#000",
 
-          // 🔥 Profile Icon (Left)
+          /* ================= LEFT PROFILE ICON ================= */
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.push("/(mechanic)/menu")}
@@ -54,29 +140,32 @@ export default function MechanicLayout() {
             </TouchableOpacity>
           ),
 
-          // 🔥 Duty Button (Right)
+          /* ================= RIGHT DUTY BUTTON ================= */
           headerRight: () => (
             <TouchableOpacity
               onPress={toggleDuty}
+              disabled={loading}
               style={[
                 styles.dutyBtn,
                 { backgroundColor: onDuty ? "#2ecc71" : "#e74c3c" },
               ]}
             >
-              <Text style={styles.dutyText}>
-                {onDuty ? "On Duty" : "Off Duty"}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.dutyText}>
+                  {onDuty ? "On Duty" : "Off Duty"}
+                </Text>
+              )}
             </TouchableOpacity>
           ),
         }}
       >
-        {/* HOME */}
         <Stack.Screen
           name="home/index"
           options={{ title: "Home" }}
         />
 
-        {/* 🔥 MENU AS HALF SCREEN MODAL */}
         <Stack.Screen
           name="menu/index"
           options={{
@@ -86,7 +175,6 @@ export default function MechanicLayout() {
           }}
         />
 
-        {/* Other Menu Screens */}
         <Stack.Screen name="menu/earnings" />
         <Stack.Screen name="menu/incentives" />
         <Stack.Screen name="menu/nearbyRequests" />
@@ -104,6 +192,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
+    minWidth: 90,
+    alignItems: "center",
+    justifyContent: "center",
   },
   dutyText: {
     color: "#fff",

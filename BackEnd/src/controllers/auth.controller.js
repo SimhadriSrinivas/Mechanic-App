@@ -9,6 +9,22 @@ const {
 const rateLimiter = require("../utils/rateLimiter");
 const { info, error } = require("../utils/logger");
 
+/* ================= PHONE NORMALIZER ================= */
+
+function normalizePhone(phone) {
+  if (!phone) return phone;
+
+  // remove spaces, dashes etc
+  let cleaned = phone.replace(/\D/g, "");
+
+  // remove India country code 91
+  if (cleaned.startsWith("91") && cleaned.length === 12) {
+    cleaned = cleaned.slice(2);
+  }
+
+  return cleaned;
+}
+
 /* ====================================================
    SEND OTP
 ==================================================== */
@@ -24,7 +40,6 @@ async function sendOtpHandler(req, res) {
       });
     }
 
-    // Rate limit per IP
     try {
       await rateLimiter.consume(req.ip);
     } catch {
@@ -34,7 +49,6 @@ async function sendOtpHandler(req, res) {
       });
     }
 
-    // Generate OTP
     const code = createOtp(phone);
 
     const text = `Your MEC App OTP is ${code}. It expires in ${
@@ -64,7 +78,7 @@ async function sendOtpHandler(req, res) {
 
 async function verifyOtpHandler(req, res) {
   try {
-    const { phone, otp, role } = req.body || {};
+    let { phone, otp, role } = req.body || {};
 
     if (!phone || !otp || !role) {
       return res.status(400).json({
@@ -80,7 +94,6 @@ async function verifyOtpHandler(req, res) {
       });
     }
 
-    // Verify OTP
     const result = verifyOtp(phone, String(otp));
 
     if (!result.ok) {
@@ -90,10 +103,13 @@ async function verifyOtpHandler(req, res) {
       });
     }
 
+    // 🔥 Normalize before saving to DB
+    const normalizedPhone = normalizePhone(phone);
+
     /* ================= USER FLOW ================= */
 
     if (role === "user") {
-      await saveUserLogin(phone);
+      await saveUserLogin(normalizedPhone);
 
       return res.json({
         ok: true,
@@ -106,12 +122,12 @@ async function verifyOtpHandler(req, res) {
 
     /* ================= MECHANIC FLOW ================= */
 
-    const mechanic = await saveMechanicLogin(phone);
+    const mechanic = await saveMechanicLogin(normalizedPhone);
 
     if (!mechanic) {
-      return res.status(404).json({
+      return res.status(500).json({
         ok: false,
-        message: "Mechanic not found",
+        message: "Failed to create mechanic profile",
       });
     }
 
