@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { getLoggedInPhone } from "@/utils/storage";
+import { useRouter } from "expo-router";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -19,7 +20,6 @@ type Props = {
   userLat: number;
   userLng: number;
   vehicleType?: string;
-  onAccepted?: () => void;
 };
 
 export default function StatusCard({
@@ -29,15 +29,16 @@ export default function StatusCard({
   userLat,
   userLng,
   vehicleType,
-  onAccepted,
 }: Props) {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [distanceKm, setDistanceKm] = useState<string>("0");
   const [pickupAddress, setPickupAddress] = useState("Loading...");
   const [mechanicAddress, setMechanicAddress] = useState("Loading...");
   const [mechanicCoords, setMechanicCoords] = useState<any>(null);
 
-  /* ================= LOAD REAL DATA ================= */
+  /* ================= LOAD LOCATION ================= */
   useEffect(() => {
     loadData();
   }, []);
@@ -63,7 +64,6 @@ export default function StatusCard({
 
       setDistanceKm(dist);
 
-      // USER ADDRESS
       const userAddr = await Location.reverseGeocodeAsync({
         latitude: userLat,
         longitude: userLng,
@@ -73,7 +73,6 @@ export default function StatusCard({
         setPickupAddress(formatAddress(userAddr[0]));
       }
 
-      // MECHANIC ADDRESS
       const mechAddr = await Location.reverseGeocodeAsync({
         latitude: mech.coords.latitude,
         longitude: mech.coords.longitude,
@@ -113,17 +112,17 @@ export default function StatusCard({
     ).toFixed(1);
   };
 
-  /* ================= FORMAT ADDRESS ================= */
   const formatAddress = (a: any) => {
     return `${a.street || ""}, ${
       a.city || a.subregion || ""
     }, ${a.region || ""} - ${a.postalCode || ""}`;
   };
 
-  /* ================= ACCEPT ================= */
+  /* ================= ACCEPT REQUEST ================= */
   const acceptRequest = async () => {
     try {
       if (!API_URL || !mechanicCoords) return;
+      if (loading) return;
 
       setLoading(true);
 
@@ -133,22 +132,19 @@ export default function StatusCard({
         return;
       }
 
-      const res = await fetch(
-        `${API_URL}/api/service/accept`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-          },
-          body: JSON.stringify({
-            requestId,
-            mechanic_phone: mechanicPhone,
-            mechanic_lat: mechanicCoords.latitude,
-            mechanic_lng: mechanicCoords.longitude,
-          }),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/service/accept`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          requestId,
+          mechanic_phone: mechanicPhone,
+          mechanic_lat: mechanicCoords.latitude,
+          mechanic_lng: mechanicCoords.longitude,
+        }),
+      });
 
       const data = await res.json();
 
@@ -156,7 +152,17 @@ export default function StatusCard({
         throw new Error(data?.message || "Accept failed");
       }
 
-      onAccepted?.();
+      /* 🔥 NAVIGATE TO DUTY MAP */
+      router.replace({
+        pathname: "/mechanic/DutyMap",
+        params: {
+          requestId,
+          userLat: userLat.toString(),
+          userLng: userLng.toString(),
+          userPhone,
+        },
+      });
+
     } catch (err: any) {
       Alert.alert("Error", err.message || "Accept failed");
     } finally {
@@ -168,33 +174,26 @@ export default function StatusCard({
   return (
     <View style={styles.wrapper}>
       <View style={styles.card}>
-
-        {/* TOP DISTANCE */}
         <Text style={styles.mainKm}>{distanceKm} KM</Text>
 
-        {/* VEHICLE BADGE */}
         <View style={styles.vehicleBadge}>
           <Text style={styles.vehicleText}>
             {vehicleType?.toUpperCase() || "VEHICLE"}
           </Text>
         </View>
 
-        {/* PICKUP SECTION */}
         <View style={styles.locationBlock}>
           <Text style={styles.zeroKm}>0 KM</Text>
           <Text style={styles.address}>{pickupAddress}</Text>
         </View>
 
-        {/* LINE */}
         <View style={styles.verticalLine} />
 
-        {/* MECHANIC SECTION */}
         <View style={styles.locationBlock}>
           <Text style={styles.destKm}>{distanceKm} KM</Text>
           <Text style={styles.address}>{mechanicAddress}</Text>
         </View>
 
-        {/* ACCEPT BUTTON */}
         {status === "pending" && (
           <TouchableOpacity
             style={styles.acceptBtn}
@@ -220,9 +219,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     paddingHorizontal: 20,
     paddingLeft: 50,
-
   },
-
   card: {
     borderWidth: 2,
     borderColor: "#000",
@@ -230,13 +227,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
   },
-
   mainKm: {
     fontSize: 20,
     fontWeight: "800",
     marginBottom: 14,
   },
-
   vehicleBadge: {
     borderWidth: 1,
     borderColor: "#000",
@@ -245,41 +240,34 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 16,
   },
-
   vehicleText: {
     fontWeight: "600",
   },
-
   locationBlock: {
     marginBottom: 10,
   },
-
   zeroKm: {
     fontWeight: "600",
   },
-
   destKm: {
     fontWeight: "600",
   },
-
   address: {
     fontSize: 14,
     marginTop: 4,
   },
-
   verticalLine: {
     borderLeftWidth: 2,
     height: 50,
     marginVertical: 10,
   },
-
   acceptBtn: {
     marginTop: 20,
     backgroundColor: "#1565C0",
     paddingVertical: 16,
     alignItems: "center",
+    borderRadius: 12,
   },
-
   acceptText: {
     color: "#fff",
     fontWeight: "700",

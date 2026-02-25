@@ -4,7 +4,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
@@ -19,8 +19,7 @@ export default function ServiceCentersScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const { status } =
-          await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
 
         if (status !== "granted") {
           setLoading(false);
@@ -83,6 +82,18 @@ export default function ServiceCentersScreen() {
               style={{ flex: 1 }}
               javaScriptEnabled
               domStorageEnabled
+              originWhitelist={["*"]}
+              onShouldStartLoadWithRequest={(request: any) => {
+                if (request.url.startsWith("intent://")) {
+                  const httpsUrl = request.url.replace(
+                    /^intent:\/\//,
+                    "https://",
+                  );
+                  Linking.openURL(httpsUrl).catch(() => {});
+                  return false;
+                }
+                return true;
+              }}
             />
           );
         })()

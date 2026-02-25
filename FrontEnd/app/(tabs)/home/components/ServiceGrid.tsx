@@ -1,4 +1,3 @@
-// app/(tabs)/home/components/ServiceGrid.tsx
 import React, { useCallback } from "react";
 import { View, FlatList } from "react-native";
 import ServiceCard from "./ServiceCard";
@@ -28,12 +27,19 @@ export default function ServiceGrid() {
           break;
 
         case "EV Help":
-          // 🔥 DIRECTLY OPEN VEHICLE SELECTION (NO INDEX FILE)
           router.push("/evhelp/vehicles");
           break;
 
+        /* 🔥 NEW BIKE PARTS NAVIGATION */
+        case "Bike Parts":
+          router.push("/BikeParts");
+          break;
+        
+          case "Car Parts":
+          router.push("/CarParts");
+          break;
+
         default:
-          // no action for other cards
           break;
       }
     },
