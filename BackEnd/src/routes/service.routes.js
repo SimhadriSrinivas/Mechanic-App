@@ -5,11 +5,9 @@ const router = express.Router();
 
 const {
   createRequest,
-  cancelRequest,
   acceptRequest,
   updateMechanicLocation,
   getActiveServiceRequests,
-  getServiceRequestByIdController,
   userHistory,
   mechanicHistory,
 } = require("../controllers/service.controller");
@@ -30,15 +28,8 @@ const {
 // ✅ Create new service request
 router.post("/create", createRequest);
 
-// ✅ Cancel service request
-router.post("/cancel", cancelRequest);
-
-// ✅ Get specific request by ID (Polling)
-router.get("/request/:id", getServiceRequestByIdController);
-
-// ✅ Get user service history
-router.get("/user-history", userHistory);
-
+// ❌ Removed cancelRequest (not implemented in controller)
+// ❌ Removed getServiceRequestByIdController (not implemented)
 
 /* =====================================================
    MECHANIC ROUTES
@@ -49,6 +40,9 @@ router.post("/accept", acceptRequest);
 
 // ✅ Update live mechanic GPS location
 router.post("/update-location", updateMechanicLocation);
+
+// ✅ Get user service history
+router.get("/user-history", userHistory);
 
 // ✅ Get mechanic history
 router.get("/mechanic-history", mechanicHistory);

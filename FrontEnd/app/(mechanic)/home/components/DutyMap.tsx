@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
-  StyleSheet,
   ActivityIndicator,
   Text,
   Dimensions,
@@ -68,14 +67,12 @@ export default function DutyMap({ acceptedRequest }: Props) {
     };
   }, []);
 
-  /* ================= SEND LOCATION FUNCTION ================= */
+  /* ================= SEND LOCATION ================= */
   const sendLocationToServer = async (location: Coords) => {
     if (!acceptedRequest || !API_URL) return;
 
     try {
       const now = Date.now();
-
-      // Prevent spamming
       if (now - lastSentRef.current < 3000) return;
       lastSentRef.current = now;
 
@@ -129,7 +126,6 @@ export default function DutyMap({ acceptedRequest }: Props) {
 
         setLoading(false);
 
-        /* 🔥 LIVE WATCH */
         watchRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
@@ -152,7 +148,6 @@ export default function DutyMap({ acceptedRequest }: Props) {
           }
         );
 
-        /* 🔥 FALLBACK FORCE UPDATE EVERY 5 SEC */
         fallbackIntervalRef.current = setInterval(async () => {
           if (coords) {
             await sendLocationToServer(coords);
@@ -179,7 +174,7 @@ export default function DutyMap({ acceptedRequest }: Props) {
     };
   }, [acceptedRequest]);
 
-  /* ================= MAP HTML (UNCHANGED) ================= */
+  /* ================= MAP HTML UPDATED ================= */
   const mapHtml =
     coords && iconBase64
       ? `
@@ -203,9 +198,10 @@ html,body,#map{height:100%;margin:0}
 <body>
 <div id="map"></div>
 <script>
-let map=L.map('map').setView([${coords.latitude},${coords.longitude}],16);
+let map=L.map('map').setView([${coords.latitude},${coords.longitude}],15);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
+// Mechanic Marker
 let mechanicIcon=L.divIcon({
   html:'<div class="mechanic-icon"></div>',
   iconSize:[64,64],
@@ -213,24 +209,29 @@ let mechanicIcon=L.divIcon({
   className:''
 });
 
-L.marker([${coords.latitude},${coords.longitude}],{icon:mechanicIcon}).addTo(map);
+let mechanicMarker=L.marker([${coords.latitude},${coords.longitude}],{icon:mechanicIcon}).addTo(map);
+
+// User Marker
+${acceptedRequest ? `
+let userMarker=L.marker([${acceptedRequest.user_lat},${acceptedRequest.user_lng}]).addTo(map);
+
+// Draw route using OSRM (FREE)
+fetch('https://router.project-osrm.org/route/v1/driving/${coords.longitude},${coords.latitude};${acceptedRequest.user_lng},${acceptedRequest.user_lat}?overview=full&geometries=geojson')
+.then(res=>res.json())
+.then(data=>{
+  const route=data.routes[0].geometry;
+  L.geoJSON(route,{style:{color:'blue',weight:5}}).addTo(map);
+});
+` : ""}
 </script>
 </body>
 </html>
 `
       : "";
 
-  const styles = StyleSheet.create({
-    container: {
-      borderRadius: 0,
-      overflow: "hidden",
-      backgroundColor: "#f2f2f2",
-    },
-  });
-
   if (loading || !coords || !iconBase64) {
     return (
-      <View style={[styles.container, { height: SCREEN_HEIGHT }]}>
+      <View style={{ height: SCREEN_HEIGHT, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" />
         <Text>Loading map…</Text>
       </View>
@@ -238,7 +239,7 @@ L.marker([${coords.latitude},${coords.longitude}],{icon:mechanicIcon}).addTo(map
   }
 
   return (
-    <View style={[styles.container, { height: SCREEN_HEIGHT }]}>
+    <View style={{ height: SCREEN_HEIGHT }}>
       {Platform.OS === "web" ? (
         <iframe
           srcDoc={mapHtml}

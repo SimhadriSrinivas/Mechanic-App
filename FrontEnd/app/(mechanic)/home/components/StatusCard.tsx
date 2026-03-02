@@ -33,10 +33,13 @@ export default function StatusCard({
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
-  const [distanceKm, setDistanceKm] = useState<string>("0");
+  const [distanceKm, setDistanceKm] = useState("0");
   const [pickupAddress, setPickupAddress] = useState("Loading...");
   const [mechanicAddress, setMechanicAddress] = useState("Loading...");
-  const [mechanicCoords, setMechanicCoords] = useState<any>(null);
+  const [mechanicCoords, setMechanicCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   /* ================= LOAD LOCATION ================= */
   useEffect(() => {
@@ -45,9 +48,13 @@ export default function StatusCard({
 
   const loadData = async () => {
     try {
-      const { status } =
+      const permission =
         await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+
+      if (permission.status !== "granted") {
+        Alert.alert("Location permission denied");
+        return;
+      }
 
       const mech = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
@@ -121,12 +128,17 @@ export default function StatusCard({
   /* ================= ACCEPT REQUEST ================= */
   const acceptRequest = async () => {
     try {
-      if (!API_URL || !mechanicCoords) return;
+      if (!API_URL) return;
+      if (!mechanicCoords) {
+        Alert.alert("Waiting for location...");
+        return;
+      }
       if (loading) return;
 
       setLoading(true);
 
       const mechanicPhone = await getLoggedInPhone();
+
       if (!mechanicPhone) {
         Alert.alert("Not logged in");
         return;
@@ -152,13 +164,13 @@ export default function StatusCard({
         throw new Error(data?.message || "Accept failed");
       }
 
-      /* 🔥 NAVIGATE TO DUTY MAP */
+      /* 🔥 Navigate back to Home screen */
       router.replace({
-        pathname: "/mechanic/DutyMap",
+        pathname: "/(mechanic)/home",
         params: {
           requestId,
-          userLat: userLat.toString(),
-          userLng: userLng.toString(),
+          userLat: String(userLat),
+          userLng: String(userLng),
           userPhone,
         },
       });
@@ -183,14 +195,14 @@ export default function StatusCard({
         </View>
 
         <View style={styles.locationBlock}>
-          <Text style={styles.zeroKm}>0 KM</Text>
+          <Text style={styles.zeroKm}>User Location</Text>
           <Text style={styles.address}>{pickupAddress}</Text>
         </View>
 
         <View style={styles.verticalLine} />
 
         <View style={styles.locationBlock}>
-          <Text style={styles.destKm}>{distanceKm} KM</Text>
+          <Text style={styles.destKm}>Your Location</Text>
           <Text style={styles.address}>{mechanicAddress}</Text>
         </View>
 

@@ -23,8 +23,10 @@ export default function MechanicHome() {
   const [checking, setChecking] = useState(true);
   const [requests, setRequests] = useState<any[]>([]);
   const [mechanicPhone, setMechanicPhone] = useState("");
+  const [lockedAcceptedRequest, setLockedAcceptedRequest] =
+    useState<any | null>(null);
 
-  const intervalRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ================= INIT ================= */
   useEffect(() => {
@@ -53,8 +55,25 @@ export default function MechanicHome() {
       );
 
       const data = await res.json();
+
       if (data.success) {
-        setRequests(data.requests || []);
+        const newRequests = data.requests || [];
+        setRequests(newRequests);
+
+        // 🔥 LOCK accepted request immediately
+        const accepted = newRequests.find(
+          (r: any) => r.status === "accepted"
+        );
+
+        if (accepted) {
+          setLockedAcceptedRequest(accepted);
+
+          // stop polling once accepted
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+        }
       }
     } catch (err) {
       console.log("Fetch error:", err);
@@ -65,16 +84,21 @@ export default function MechanicHome() {
   useEffect(() => {
     if (!onDuty || !mechanicPhone) {
       setRequests([]);
+      setLockedAcceptedRequest(null);
       return;
     }
 
+    // already accepted → no polling
+    if (lockedAcceptedRequest) return;
+
     fetchRequests();
+
     intervalRef.current = setInterval(fetchRequests, 4000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [onDuty, mechanicPhone]);
+  }, [onDuty, mechanicPhone, lockedAcceptedRequest]);
 
   /* ================= LOADING ================= */
   if (checking) {
@@ -87,9 +111,9 @@ export default function MechanicHome() {
 
   /* ================= REQUEST LOGIC ================= */
 
-  const acceptedRequest = requests.find(
-    (r) => r.status === "accepted"
-  );
+  const acceptedRequest =
+    lockedAcceptedRequest ||
+    requests.find((r) => r.status === "accepted");
 
   const pendingRequests = requests.filter(
     (r) => r.status === "pending"
@@ -98,19 +122,18 @@ export default function MechanicHome() {
   /* ================= UI ================= */
   return (
     <SafeAreaView style={styles.container}>
-
       {/* OFF DUTY */}
       {!onDuty && <ReferEarnCard />}
 
       {/* ON DUTY */}
       {onDuty && (
         <>
-          {/* 🔵 IF ACCEPTED → SHOW FULL MAP WITH ROUTE */}
+          {/* 🔵 IF ACCEPTED → FULL SCREEN MAP */}
           {acceptedRequest && (
             <DutyMap acceptedRequest={acceptedRequest} />
           )}
 
-          {/* 🟢 IF ONLY PENDING → SHOW REQUEST CARDS */}
+          {/* 🟢 IF ONLY PENDING */}
           {!acceptedRequest && pendingRequests.length > 0 && (
             <ScrollView contentContainerStyle={styles.requestScreen}>
               {pendingRequests.map((req: any) => (
@@ -122,13 +145,12 @@ export default function MechanicHome() {
                   userLat={Number(req.user_lat)}
                   userLng={Number(req.user_lng)}
                   vehicleType={req.vehicle_type}
-                  onAccepted={fetchRequests}
                 />
               ))}
             </ScrollView>
           )}
 
-          {/* 🟡 IF NO REQUESTS → NORMAL MAP */}
+          {/* 🟡 IF NO REQUESTS */}
           {!acceptedRequest && pendingRequests.length === 0 && (
             <DutyMap />
           )}
@@ -145,13 +167,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
   },
-
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-
   requestScreen: {
     padding: 20,
     paddingBottom: 80,

@@ -46,10 +46,7 @@ async function createRequest(req, res) {
       mechanic_lat: null,
       mechanic_lng: null,
       acceptedAt: null,
-      call_started_at: null,
-      call_completed_at: null,
       cancelled_by: null,
-      amount: null,
     });
 
     return res.status(201).json({
@@ -66,7 +63,7 @@ async function createRequest(req, res) {
 }
 
 /* =====================================
-   ACCEPT REQUEST
+   ACCEPT REQUEST (SAFE LOCK VERSION)
 ===================================== */
 async function acceptRequest(req, res) {
   try {
@@ -76,7 +73,24 @@ async function acceptRequest(req, res) {
     if (!requestId || !mechanic_phone) {
       return res.status(400).json({
         success: false,
-        message: "requestId and mechanic_phone are required",
+        message: "requestId and mechanic_phone required",
+      });
+    }
+
+    const allRequests = await getAllServiceRequests();
+    const docs = allRequests?.documents || [];
+
+    // 🔥 Check if mechanic already has active job
+    const alreadyActive = docs.find(
+      (r) =>
+        r.status === "accepted" &&
+        r.mechanic_phone === mechanic_phone
+    );
+
+    if (alreadyActive) {
+      return res.status(409).json({
+        success: false,
+        message: "Mechanic already has an active job",
       });
     }
 
@@ -118,38 +132,6 @@ async function acceptRequest(req, res) {
 }
 
 /* =====================================
-   CANCEL REQUEST
-===================================== */
-async function cancelRequest(req, res) {
-  try {
-    const { requestId } = req.body;
-
-    if (!requestId) {
-      return res.status(400).json({
-        success: false,
-        message: "requestId is required",
-      });
-    }
-
-    const updated = await updateServiceRequest(requestId, {
-      status: "cancelled",
-      cancelled_by: "user",
-    });
-
-    return res.json({
-      success: true,
-      data: updated,
-    });
-  } catch (err) {
-    console.error("cancelRequest error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-}
-
-/* =====================================
    UPDATE LOCATION
 ===================================== */
 async function updateMechanicLocation(req, res) {
@@ -159,7 +141,7 @@ async function updateMechanicLocation(req, res) {
     if (!requestId) {
       return res.status(400).json({
         success: false,
-        message: "requestId is required",
+        message: "requestId required",
       });
     }
 
@@ -182,29 +164,45 @@ async function updateMechanicLocation(req, res) {
 }
 
 /* =====================================
-   GET ACTIVE REQUESTS
+   GET ACTIVE REQUESTS (FIXED FILTER)
 ===================================== */
 async function getActiveServiceRequests(req, res) {
   try {
-    const { mechanicPhone } = req.query;
+    const { mechanicPhone, vehicleTypes } = req.query;
 
     if (!mechanicPhone) {
       return res.status(400).json({
         success: false,
-        message: "mechanicPhone is required",
+        message: "mechanicPhone required",
       });
     }
 
     const result = await getAllServiceRequests();
     const docs = result?.documents || [];
 
+    let mechanicVehicles = [];
+
+    if (vehicleTypes) {
+      mechanicVehicles = vehicleTypes.split(",");
+    }
+
     const filtered = docs.filter((r) => {
-      if (r.status === "pending") return true;
+      // Pending requests only for matching vehicle type
+      if (
+        r.status === "pending" &&
+        mechanicVehicles.includes(r.vehicle_type)
+      ) {
+        return true;
+      }
+
+      // Accepted request only for this mechanic
       if (
         r.status === "accepted" &&
         r.mechanic_phone === mechanicPhone
-      )
+      ) {
         return true;
+      }
+
       return false;
     });
 
@@ -214,34 +212,6 @@ async function getActiveServiceRequests(req, res) {
     });
   } catch (err) {
     console.error("getActiveServiceRequests error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-}
-/* =====================================
-   GET REQUEST BY ID
-===================================== */
-async function getServiceRequestByIdController(req, res) {
-  try {
-    const { id } = req.params;
-
-    const request = await getServiceRequestById(id);
-
-    if (!request) {
-      return res.status(404).json({
-        success: false,
-        message: "Request not found",
-      });
-    }
-
-    return res.json({
-      success: true,
-      data: request,
-    });
-  } catch (err) {
-    console.error("getServiceRequestById error:", err);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -271,13 +241,12 @@ async function mechanicHistory(req, res) {
     data: history?.documents || [],
   });
 }
+
 module.exports = {
   createRequest,
-  cancelRequest,
   acceptRequest,
   updateMechanicLocation,
   getActiveServiceRequests,
-  getServiceRequestByIdController, 
   userHistory,
   mechanicHistory,
 };

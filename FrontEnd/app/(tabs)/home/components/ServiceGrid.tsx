@@ -35,10 +35,18 @@ export default function ServiceGrid() {
           router.push("/BikeParts");
           break;
         
-          case "Car Parts":
+        case "Car Parts":
           router.push("/CarParts");
           break;
+        
+        case "Bikes":
+          router.push("/Bikes");
+          break;
 
+        case "Cars":
+          router.push("/Cars");
+          break;
+          
         default:
           break;
       }

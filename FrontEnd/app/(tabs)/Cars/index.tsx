@@ -13,83 +13,80 @@ import { useRouter } from "expo-router";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-type Bike = {
+type Car = {
   id: string;
   name: string;
   price: string;
   image: any;
-  displacement: string;
-  power: string;
-  torque: string;
 };
 
-export default function BikesScreen() {
+export default function CarsScreen() {
   const router = useRouter();
 
-  const bikes: Bike[] = [
+  const cars: Car[] = [
     {
-      id: "hero125",
-      name: "Hero Xtreme 125R",
-      price: "₹95,000",
-      image: require("../../../assets/images/hero_xtreme.avif"),
-      displacement: "124.7 cc",
-      power: "11.4 bhp",
-      torque: "10.5 Nm",
+      id: "city",
+      name: "Honda City",
+      price: "₹11,50,000",
+      image: require("../../../assets/images/Cars/city.avif"),
     },
     {
-      id: "shine100",
-      name: "Honda Shine 100",
-      price: "₹80,000",
-      image: require("../../../assets/images/honda_shine.avif"),
-      displacement: "98.98 cc",
-      power: "7.3 bhp",
-      torque: "8.05 Nm",
+      id: "fortuner",
+      name: "Toyota Fortuner",
+      price: "₹33,00,000",
+      image: require("../../../assets/images/Cars/fortuner.avif"),
     },
     {
-      id: "raider125",
-      name: "TVS Raider 125",
-      price: "₹1,00,000",
-      image: require("../../../assets/images/tvs_raider.avif"),
-      displacement: "124.8 cc",
-      power: "11.2 bhp",
-      torque: "11.2 Nm",
+      id: "harrier",
+      name: "Tata Harrier",
+      price: "₹15,00,000",
+      image: require("../../../assets/images/Cars/harrier.avif"),
     },
     {
-      id: "r15v4",
-      name: "Yamaha R15 V4",
-      price: "₹1,80,000",
-      image: require("../../../assets/images/r15.avif"),
-      displacement: "155 cc",
-      power: "18.4 bhp",
-      torque: "14.2 Nm",
+      id: "maruti_baleno",
+      name: "Maruti Baleno",
+      price: "₹7,50,000",
+      image: require("../../../assets/images/Cars/maruti_baleno.avif"),
     },
     {
-      id: "ns200",
-      name: "Bajaj Pulsar NS200",
-      price: "₹1,60,000",
-      image: require("../../../assets/images/ns200.avif"),
-      displacement: "199.5 cc",
-      power: "24.1 bhp",
-      torque: "18.7 Nm",
+      id: "maruti_swift",
+      name: "Maruti Swift",
+      price: "₹6,50,000",
+      image: require("../../../assets/images/Cars/maruti_swift.avif"),
     },
     {
-      id: "hunter350",
-      name: "Royal Enfield Hunter 350",
-      price: "₹1,75,000",
-      image: require("../../../assets/images/hunter350.avif"),
-      displacement: "349 cc",
-      power: "20.2 bhp",
-      torque: "27 Nm",
+      id: "nexon",
+      name: "Tata Nexon",
+      price: "₹9,00,000",
+      image: require("../../../assets/images/Cars/nexon.avif"),
+    },
+    {
+      id: "scorpio",
+      name: "Mahindra Scorpio",
+      price: "₹13,00,000",
+      image: require("../../../assets/images/Cars/scorpio.avif"),
+    },
+    {
+      id: "thar",
+      name: "Mahindra Thar",
+      price: "₹14,00,000",
+      image: require("../../../assets/images/Cars/thar.avif"),
+    },
+    {
+      id: "xuv700",
+      name: "Mahindra XUV700",
+      price: "₹15,50,000",
+      image: require("../../../assets/images/Cars/xuv700.avif"),
     },
   ];
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        <Text style={styles.title}>New Bikes in Market</Text>
+        <Text style={styles.title}>New Cars in Market</Text>
 
         <FlatList
-          data={bikes}
+          data={cars}
           keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={{ justifyContent: "space-between" }}
@@ -98,7 +95,7 @@ export default function BikesScreen() {
               style={styles.card}
               onPress={() =>
                 router.push({
-                  pathname: "/Bikes/id",
+                  pathname: "/Cars/id",
                   params: { id: item.id },
                 })
               }
