@@ -1,7 +1,7 @@
 // services/api.ts
 
 const BACKEND_URL =
-  "https://pluviometric-heliaean-myla.ngrok-free.dev";
+  "https://mechanic-app-backend-t33m.onrender.com";
 
 console.log("BACKEND_URL =", BACKEND_URL);
 
@@ -176,13 +176,20 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
-      "ngrok-skip-browser-warning": "true",
     },
     body: JSON.stringify(body),
   });
 
   const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
+
+  console.log("RAW RESPONSE:", text);
+
+  let json: any = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch (err) {
+    throw new Error("Server returned invalid JSON:\n" + text);
+  }
 
   if (!res.ok) {
     console.log("❌ API ERROR:", json);
@@ -191,7 +198,6 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
   return json as T;
 }
-
 async function get<T>(path: string): Promise<T> {
   const url = `${BACKEND_URL}${path}`;
 
@@ -201,12 +207,19 @@ async function get<T>(path: string): Promise<T> {
     method: "GET",
     headers: {
       Accept: "application/json",
-      "ngrok-skip-browser-warning": "true",
     },
   });
 
   const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
+
+  console.log("RAW RESPONSE:", text);
+
+  let json: any = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch (err) {
+    throw new Error("Server returned invalid JSON:\n" + text);
+  }
 
   if (!res.ok) {
     console.log("❌ API ERROR:", json);

@@ -302,7 +302,6 @@ async function updateDutyStatus(req, res) {
     const updated = await updateMechanicProfile(phone, {
       state,
     });
-
     if (!updated) {
       return res.status(500).json({
         success: false,
