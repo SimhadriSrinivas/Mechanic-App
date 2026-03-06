@@ -174,7 +174,7 @@ export default function DutyMap({ acceptedRequest }: Props) {
     };
   }, [acceptedRequest]);
 
-  /* ================= MAP HTML UPDATED ================= */
+  /* ================= MAP HTML ================= */
   const mapHtml =
     coords && iconBase64
       ? `
@@ -184,6 +184,7 @@ export default function DutyMap({ acceptedRequest }: Props) {
 <meta charset="utf-8"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <style>
 html,body,#map{height:100%;margin:0}
 .leaflet-div-icon{background:transparent;border:none;}
@@ -195,11 +196,26 @@ html,body,#map{height:100%;margin:0}
 }
 </style>
 </head>
+
 <body>
 <div id="map"></div>
+
 <script>
-let map=L.map('map').setView([${coords.latitude},${coords.longitude}],15);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+
+let map=L.map('map',{
+  preferCanvas:true,
+  zoomAnimation:false,
+  fadeAnimation:false
+}).setView([${coords.latitude},${coords.longitude}],15);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+  maxZoom:19,
+  maxNativeZoom:19,
+  updateWhenIdle:true,
+  keepBuffer:2
+}).addTo(map);
 
 // Mechanic Marker
 let mechanicIcon=L.divIcon({
@@ -216,13 +232,14 @@ ${acceptedRequest ? `
 let userMarker=L.marker([${acceptedRequest.user_lat},${acceptedRequest.user_lng}]).addTo(map);
 
 // Draw route using OSRM (FREE)
-fetch('https://router.project-osrm.org/route/v1/driving/${coords.longitude},${coords.latitude};${acceptedRequest.user_lng},${acceptedRequest.user_lat}?overview=full&geometries=geojson')
+fetch('https://router.project-osrm.org/route/v1/driving/${coords.longitude},${coords.latitude};${acceptedRequest.user_lng},${acceptedRequest.user_lat}?overview=simplified&geometries=geojson')
 .then(res=>res.json())
 .then(data=>{
   const route=data.routes[0].geometry;
   L.geoJSON(route,{style:{color:'blue',weight:5}}).addTo(map);
 });
 ` : ""}
+
 </script>
 </body>
 </html>
@@ -255,6 +272,9 @@ fetch('https://router.project-osrm.org/route/v1/driving/${coords.longitude},${co
               javaScriptEnabled
               domStorageEnabled
               originWhitelist={["*"]}
+              cacheEnabled={true}
+              androidLayerType="hardware"
+              startInLoadingState={true}
             />
           );
         })()

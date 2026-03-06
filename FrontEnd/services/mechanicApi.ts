@@ -2,8 +2,16 @@
    MECHANIC SERVICE (PRODUCTION SAFE VERSION)
 ===================================================== */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import Constants from "expo-constants";
+
+/* Safe API URL getter */
+const API_URL =
+  Constants.expoConfig?.extra?.API_URL ||
+  (Constants as any).manifest2?.extra?.API_URL ||
+  "";
+
 console.log("API_URL =", API_URL);
+
 /* ================= TYPES ================= */
 
 export interface MechanicPayload {

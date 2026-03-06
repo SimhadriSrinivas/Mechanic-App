@@ -40,7 +40,7 @@ export default function Tracking() {
   /* ================= LOAD ICON ================= */
   useEffect(() => {
     const asset = Asset.fromModule(
-      require("../../../assets/images/Mechnaic-icon.webp")
+      require("../../../assets/images/Mechnaic-icon.webp"),
     );
     setIconUri(asset.uri);
   }, []);
@@ -50,8 +50,7 @@ export default function Tracking() {
     let active = true;
 
     (async () => {
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
         Alert.alert("Permission required");
@@ -64,44 +63,35 @@ export default function Tracking() {
       });
 
       if (!active) return;
-
       setCoords({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
       });
-
       setLoading(false);
     })();
-
     return () => {
       active = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
-
   /* ================= FETCH NEARBY MECHANICS ================= */
   useEffect(() => {
     if (!coords || !vehicleType) return;
-
     const roleMap: Record<string, string> = {
       bike: "Bike Mechanic",
       car: "Car Mechanic",
       auto: "Auto Mechanic",
       truck: "Truck Mechanic",
     };
-
     const selectedRole = roleMap[vehicleType];
     if (!selectedRole) return;
-
     const fetchNearby = async () => {
       try {
         const url = `${API_URL}/api/mechanic/nearby?lat=${coords.latitude}&lng=${coords.longitude}&role=${encodeURIComponent(
-          selectedRole
+          selectedRole,
         )}&radius=10&_=${Date.now()}`;
-
         const res = await fetch(url);
         const data = await res.json();
-
         if (data.success && webViewRef.current) {
           webViewRef.current.injectJavaScript(`
             updateMechanics(${JSON.stringify(data.mechanics || [])});
@@ -112,29 +102,22 @@ export default function Tracking() {
         console.log("Nearby fetch error:", err);
       }
     };
-
     fetchNearby();
     intervalRef.current = setInterval(fetchNearby, 3000);
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [coords, vehicleType]);
-
   /* ================= SEND REQUEST (MERGED) ================= */
   const handleSendRequest = async () => {
     if (!coords || !vehicleType || sending) return;
-
     try {
       setSending(true);
-
       const phone = await getLoggedInPhone();
-
       if (!phone) {
         Alert.alert("Error", "User not logged in");
         return;
       }
-
       const payload = {
         userPhone: phone,
         lat: coords.latitude,
@@ -142,9 +125,7 @@ export default function Tracking() {
         service: "general-repair",
         vehicleType,
       };
-
       const id = await createRequest(payload);
-
       setRequestId(id);
       setStage("waiting"); // 🔥 Instead of navigating
     } catch (err) {
@@ -154,7 +135,6 @@ export default function Tracking() {
       setSending(false);
     }
   };
-
   if (loading || !coords || !iconUri) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -163,7 +143,6 @@ export default function Tracking() {
       </SafeAreaView>
     );
   }
-
   /* ================= MAP HTML ================= */
   const mapHtml = `
 <!DOCTYPE html>
@@ -174,9 +153,15 @@ export default function Tracking() {
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-html,body,#map{height:100%;margin:0}
-.leaflet-div-icon{background:transparent;border:none}
-
+html,body,#map{
+  height:100%;
+  margin:0;
+  padding:0;
+}
+.leaflet-div-icon{
+  background:transparent;
+  border:none;
+}
 .user-dot{
   width:18px;
   height:18px;
@@ -185,7 +170,6 @@ html,body,#map{height:100%;margin:0}
   border:3px solid white;
   box-shadow:0 0 0 8px rgba(0,122,255,0.2);
 }
-
 .mechanic-icon{
   width:64px;
   height:64px;
@@ -198,36 +182,42 @@ html,body,#map{height:100%;margin:0}
 <body>
 <div id="map"></div>
 <script>
-let map=L.map('map').setView([${coords.latitude},${coords.longitude}],16);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:19
+let map = L.map('map',{
+  preferCanvas:true,
+  zoomAnimation:false,
+  fadeAnimation:false
+}).setView([${coords.latitude},${coords.longitude}],16);
+L.tileLayer(
+  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+  maxZoom:19,
+  maxNativeZoom:19,
+  updateWhenIdle:true,
+  keepBuffer:2
 }).addTo(map);
-
-let userIcon=L.divIcon({
+let userIcon = L.divIcon({
   html:'<div class="user-dot"></div>',
   iconSize:[24,24],
   iconAnchor:[12,12],
   className:''
 });
-
 L.marker([${coords.latitude},${coords.longitude}],{icon:userIcon}).addTo(map);
-
 let mechanicMarkers=[];
-
-let mechanicIcon=L.divIcon({
+let mechanicIcon = L.divIcon({
   html:'<div class="mechanic-icon"></div>',
   iconSize:[64,64],
   iconAnchor:[32,32],
   className:''
 });
-
 function updateMechanics(mechanics){
   mechanicMarkers.forEach(m=>map.removeLayer(m));
   mechanicMarkers=[];
   mechanics.forEach(m=>{
     if(!m.latitude || !m.longitude) return;
-    const marker=L.marker([m.latitude,m.longitude],{icon:mechanicIcon}).addTo(map);
+    const marker=L.marker(
+      [m.latitude,m.longitude],
+      {icon:mechanicIcon}
+    ).addTo(map);
     mechanicMarkers.push(marker);
   });
 }
@@ -235,9 +225,7 @@ function updateMechanics(mechanics){
 </body>
 </html>
 `;
-
   const NativeWebView = require("react-native-webview").WebView;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={{ flex: 1 }}>
@@ -253,6 +241,9 @@ function updateMechanics(mechanics){
             javaScriptEnabled
             domStorageEnabled
             originWhitelist={["*"]}
+            cacheEnabled={true}
+            androidLayerType="hardware"
+            startInLoadingState={true}
           />
         )}
       </View>
@@ -266,9 +257,7 @@ function updateMechanics(mechanics){
             disabled={sending}
           >
             <Text style={styles.buttonText}>
-              {sending
-                ? "Sending..."
-                : `Request ${vehicleType ?? ""} Mechanic`}
+              {sending ? "Sending..." : `Request ${vehicleType ?? ""} Mechanic`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -278,12 +267,8 @@ function updateMechanics(mechanics){
       {stage === "waiting" && (
         <View style={styles.waitingPanel}>
           <View style={styles.dragIndicator} />
-          <Text style={styles.waitingTitle}>
-            Searching for Mechanic...
-          </Text>
-          <Text style={styles.waitingSub}>
-            Request ID: {requestId}
-          </Text>
+          <Text style={styles.waitingTitle}>Searching for Mechanic...</Text>
+          <Text style={styles.waitingSub}>Request ID: {requestId}</Text>
         </View>
       )}
     </SafeAreaView>

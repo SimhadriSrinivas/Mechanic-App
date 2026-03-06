@@ -2,14 +2,12 @@
   "expo": {
     "name": "FrontEnd",
     "slug": "FrontEnd",
+    "jsEngine": "hermes",
     "version": "1.0.0",
     "orientation": "portrait",
-
     "icon": "./assets/images/icon.png",
-
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
 
     "ios": {
       "supportsTablet": true,
@@ -48,7 +46,13 @@
     ],
 
     "extra": {
-      "backendUrl": "https://pluviometric-heliaean-myla.ngrok-free.dev"
-    }
+      "API_URL": "https://mechanic-app-backend-t33m.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "bc96ac7a-1c80-4139-83a3-39b5c4747686"
+      }
+    },
+
+    "owner": "srinu7"
   }
 }
