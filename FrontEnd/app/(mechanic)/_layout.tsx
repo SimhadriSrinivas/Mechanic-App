@@ -1,20 +1,14 @@
 import { Stack } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { StatusBar } from "expo-status-bar";
 import React, { createContext, useState, useEffect } from "react";
-import { useRouter } from "expo-router";
+import { ActivityIndicator, View, Alert, StyleSheet } from "react-native";
+import { StatusBar } from "expo-status-bar";
 
 import { getLoggedInPhone } from "@/utils/storage";
 import { updateDutyStatus } from "@/services/mechanicApi";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+/* ================= DUTY CONTEXT ================= */
 
 export const DutyContext = createContext<{
   onDuty: boolean;
@@ -24,18 +18,45 @@ export const DutyContext = createContext<{
   toggleDuty: () => {},
 });
 
+/* ================= REPAIR CONTEXT ================= */
+
+export const RepairContext = createContext<{
+  amount: string;
+  issue: string;
+  setRepairData: (amount: string, issue: string) => void;
+  clearRepairData: () => void;
+}>({
+  amount: "",
+  issue: "",
+  setRepairData: () => {},
+  clearRepairData: () => {},
+});
+
 export default function MechanicLayout() {
   const [onDuty, setOnDuty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const router = useRouter();
 
-  /* ================= LOAD DUTY STATE FROM BACKEND ================= */
+  const [amount, setAmount] = useState("");
+  const [issue, setIssue] = useState("");
+
+  const setRepairData = (amt: string, iss: string) => {
+    setAmount(amt);
+    setIssue(iss);
+  };
+
+  const clearRepairData = () => {
+    setAmount("");
+    setIssue("");
+  };
+
+  /* ================= LOAD DUTY STATE ================= */
 
   useEffect(() => {
     const loadDutyState = async () => {
       try {
         const phone = await getLoggedInPhone();
+
         if (!phone || !API_URL) {
           setInitialLoading(false);
           return;
@@ -47,7 +68,7 @@ export default function MechanicLayout() {
             headers: {
               "ngrok-skip-browser-warning": "true",
             },
-          }
+          },
         );
 
         const data = await res.json();
@@ -74,6 +95,7 @@ export default function MechanicLayout() {
       setLoading(true);
 
       const phone = await getLoggedInPhone();
+
       if (!phone) {
         Alert.alert("Error", "Mechanic not logged in");
         return;
@@ -97,108 +119,69 @@ export default function MechanicLayout() {
     }
   };
 
-  /* ================= WAIT FOR INITIAL LOAD ================= */
+  /* ================= LOADING ================= */
 
   if (initialLoading) {
     return (
-      <>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
-        <ActivityIndicator
-          style={{ flex: 1, alignSelf: "center" }}
-          size="large"
-        />
-      </>
+      <View style={styles.loading}>
+        <StatusBar style="dark" />
+        <ActivityIndicator size="large" />
+      </View>
     );
   }
 
+  /* ================= LAYOUT ================= */
+
   return (
     <DutyContext.Provider value={{ onDuty, toggleDuty }}>
-      <StatusBar style="dark" backgroundColor="#ffffff" />
-
-      <Stack
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: "#ffffff",
-          },
-          headerTitleStyle: {
-            color: "#000",
-            fontWeight: "600",
-          },
-          headerTintColor: "#000",
-
-          /* ================= LEFT PROFILE ICON ================= */
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.push("/(mechanic)/menu")}
-              style={{ marginLeft: 15 }}
-            >
-              <Ionicons
-                name="person-circle-outline"
-                size={40}
-                color="#000"
-              />
-            </TouchableOpacity>
-          ),
-
-          /* ================= RIGHT DUTY BUTTON ================= */
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={toggleDuty}
-              disabled={loading}
-              style={[
-                styles.dutyBtn,
-                { backgroundColor: onDuty ? "#2ecc71" : "#e74c3c" },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.dutyText}>
-                  {onDuty ? "On Duty" : "Off Duty"}
-                </Text>
-              )}
-            </TouchableOpacity>
-          ),
+      <RepairContext.Provider
+        value={{
+          amount,
+          issue,
+          setRepairData,
+          clearRepairData,
         }}
       >
-        <Stack.Screen
-          name="home/index"
-          options={{ title: "Home" }}
-        />
+        <StatusBar style="dark" backgroundColor="#ffffff" />
 
-        <Stack.Screen
-          name="menu/index"
-          options={{
+        {/* ✅ FIXED STACK */}
+        <Stack
+          screenOptions={{
             headerShown: false,
-            presentation: "transparentModal",
             animation: "fade",
           }}
-        />
+        >
+          {/* 🔥 IMPORTANT: REMOVE home/index restriction */}
 
-        <Stack.Screen name="menu/earnings" />
-        <Stack.Screen name="menu/incentives" />
-        <Stack.Screen name="menu/nearbyRequests" />
-        <Stack.Screen name="menu/refer" />
-        <Stack.Screen name="menu/history" />
-        <Stack.Screen name="menu/helpline" />
-      </Stack>
+          {/* Allow all routes automatically */}
+
+          {/* Optional: explicitly include repair screen */}
+          {/* <Stack.Screen name="(mechanic)/home/repair" /> */}
+
+          {/* Menu screens */}
+          <Stack.Screen
+            name="menu/index"
+            options={{
+              presentation: "transparentModal",
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen name="menu/earnings" />
+          <Stack.Screen name="menu/incentives" />
+          <Stack.Screen name="menu/nearbyRequests" />
+          <Stack.Screen name="menu/refer" />
+          <Stack.Screen name="menu/history" />
+          <Stack.Screen name="menu/helpline" />
+        </Stack>
+      </RepairContext.Provider>
     </DutyContext.Provider>
   );
 }
 
 const styles = StyleSheet.create({
-  dutyBtn: {
-    marginRight: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    minWidth: 90,
-    alignItems: "center",
+  loading: {
+    flex: 1,
     justifyContent: "center",
-  },
-  dutyText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 13,
+    alignItems: "center",
   },
 });

@@ -7,9 +7,12 @@ const {
   createRequest,
   acceptRequest,
   updateMechanicLocation,
+  cancelRequest,
   getActiveServiceRequests,
   userHistory,
   mechanicHistory,
+  completeService, // ✅ NEW IMPORT
+  getRequestById, // ✅ NEW IMPORT
 } = require("../controllers/service.controller");
 
 /*
@@ -25,29 +28,41 @@ const {
    USER ROUTES
 ===================================================== */
 
-// ✅ Create new service request
+// Create a new service request
 router.post("/create", createRequest);
 
-// ❌ Removed cancelRequest (not implemented in controller)
-// ❌ Removed getServiceRequestByIdController (not implemented)
+// Get user service history
+router.get("/user-history", userHistory);
+
+// Get service request by ID
+router.get("/request/:requestId", getRequestById);
 
 /* =====================================================
    MECHANIC ROUTES
 ===================================================== */
 
-// ✅ Accept a pending request
+// Accept a pending request
 router.post("/accept", acceptRequest);
 
-// ✅ Update live mechanic GPS location
+// Update mechanic live GPS location
 router.post("/update-location", updateMechanicLocation);
 
-// ✅ Get user service history
-router.get("/user-history", userHistory);
+// Cancel a pending request
+router.post("/cancel", cancelRequest);
 
-// ✅ Get mechanic history
+// Complete service + payment (🔥 NEW)
+router.post("/complete-service", completeService);
+
+// Get mechanic service history
 router.get("/mechanic-history", mechanicHistory);
 
-// ✅ Get active service requests (KEEP LAST GET ROUTE)
+/* =====================================================
+   ACTIVE REQUESTS (KEEP LAST)
+===================================================== */
+
+// Get active service requests
+// Example:
+// GET /api/service?mechanicPhone=XXXXXXXXXX
 router.get("/", getActiveServiceRequests);
 
 module.exports = router;

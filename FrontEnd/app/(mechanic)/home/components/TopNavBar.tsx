@@ -23,32 +23,47 @@ export default function TopNavBar({
 
   return (
     <View style={styles.container}>
-      {/* LEFT: APP NAME */}
-      <Text style={styles.title}>MEC</Text>
+      {/* LEFT SIDE */}
+      <View style={styles.left}>
+        <Text style={styles.title}>Mechanic</Text>
+        <Text style={styles.subtitle}>
+          {onDuty ? "You are online" : "You are offline"}
+        </Text>
+      </View>
 
-      {/* RIGHT ACTIONS */}
+      {/* RIGHT SIDE */}
       <View style={styles.right}>
-        {/* ON DUTY TOGGLE */}
+        {/* DUTY TOGGLE */}
         <TouchableOpacity
           style={[
-            styles.dutyBtn,
-            onDuty ? styles.on : styles.off,
+            styles.dutyChip,
+            onDuty ? styles.dutyOn : styles.dutyOff,
           ]}
           onPress={toggleDuty}
         >
-          <Text style={styles.dutyText}>
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: onDuty ? "#16a34a" : "#ef4444" },
+            ]}
+          />
+
+          <Text
+            style={[
+              styles.dutyText,
+              { color: onDuty ? "#065f46" : "#7f1d1d" },
+            ]}
+          >
             {onDuty ? "ON DUTY" : "OFF DUTY"}
           </Text>
         </TouchableOpacity>
 
-        {/* PROFILE ICON */}
+        {/* PROFILE BUTTON */}
         <TouchableOpacity
           style={styles.profileBtn}
-          onPress={() => router.push("../(mechanic)/profile")}
+          onPress={() => router.push("/(mechanic)/menu")}
         >
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={18} color="#fff" />
-          </View>
+          <Ionicons name="person" size={22} color="#111827" />
         </TouchableOpacity>
       </View>
     </View>
@@ -59,19 +74,33 @@ export default function TopNavBar({
 
 const styles = StyleSheet.create({
   container: {
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
+    height: 70,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    backgroundColor: "#ffffff",
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    elevation: 3,
+
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+
+  left: {
+    justifyContent: "center",
   },
 
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
-    color: "#1976D2",
+    color: "#111827",
+  },
+
+  subtitle: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
   },
 
   right: {
@@ -79,36 +108,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  dutyBtn: {
-    paddingHorizontal: 12,
+  /* DUTY CHIP */
+
+  dutyChip: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 6,
-    borderRadius: 14,
-    marginRight: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 14,
   },
 
-  on: {
-    backgroundColor: "#4CAF50",
+  dutyOn: {
+    backgroundColor: "#dcfce7",
   },
 
-  off: {
-    backgroundColor: "#9E9E9E",
+  dutyOff: {
+    backgroundColor: "#fee2e2",
+  },
+
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
 
   dutyText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#fff",
+    fontWeight: "700",
   },
+
+  /* PROFILE */
 
   profileBtn: {
-    padding: 4,
-  },
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f3f4f6",
 
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#1976D2",
     alignItems: "center",
     justifyContent: "center",
   },

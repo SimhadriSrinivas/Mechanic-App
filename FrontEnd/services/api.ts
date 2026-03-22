@@ -1,9 +1,8 @@
 // services/api.ts
 
 const BACKEND_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
   "https://mechanic-app-backend-t33m.onrender.com";
-
-console.log("BACKEND_URL =", BACKEND_URL);
 
 /* ================= TYPES ================= */
 
@@ -61,10 +60,25 @@ export function verifyOtp(
 }
 
 /* =========================================================
-   SERVICE REQUEST ROUTES
+   MECHANIC ROUTES  (🔥 ADDED)
 ========================================================= */
 
-/* ================= CREATE ================= */
+export function getMechanicProfile(phone: string) {
+  return get<ApiResponse>(
+    `/api/mechanic/profile?phone=${encodeURIComponent(phone)}`,
+  );
+}
+
+export function updateDutyStatus(phone: string, state: "OnDuty" | "OffDuty") {
+  return post<ApiResponse>("/api/mechanic/update-duty", {
+    phone,
+    state,
+  });
+}
+
+/* =========================================================
+   SERVICE REQUEST ROUTES
+========================================================= */
 
 export function createServiceRequest(data: {
   userPhone: string;
@@ -82,24 +96,41 @@ export function createServiceRequest(data: {
   });
 }
 
-/* ================= GET BY ID (FOR POLLING) ================= */
-/* 🔥 FIXED HERE */
-
 export function getServiceRequestByIdApi(requestId: string) {
   return get<ApiResponse>(
-    `/api/service/request/${encodeURIComponent(requestId)}`
+    `/api/service/request/${encodeURIComponent(requestId)}`,
   );
 }
 
-/* ================= CANCEL ================= */
-
-export function cancelServiceRequest(requestId: string) {
-  return post<ApiResponse>("/api/service/cancel", {
+export async function cancelServiceRequest(requestId: string) {
+  const payload = {
     requestId,
-  });
-}
+    request_id: requestId,
+  };
 
-/* ================= ACCEPT ================= */
+  try {
+    return await post<ApiResponse>("/api/service/cancel", payload);
+  } catch (primaryError: any) {
+    const message = String(primaryError?.message || "").toLowerCase();
+
+    if (!message.includes("route not found")) {
+      throw primaryError;
+    }
+
+    // Fallback for older/newer backend route variants
+    try {
+      return await post<ApiResponse>("/api/service/cancel-request", payload);
+    } catch (secondaryError: any) {
+      const secondMessage = String(secondaryError?.message || "").toLowerCase();
+
+      if (!secondMessage.includes("route not found")) {
+        throw secondaryError;
+      }
+
+      return post<ApiResponse>("/api/service/request/cancel", payload);
+    }
+  }
+}
 
 export function acceptServiceRequest(data: {
   requestId: string;
@@ -110,8 +141,6 @@ export function acceptServiceRequest(data: {
   return post<ApiResponse>("/api/service/accept", data);
 }
 
-/* ================= UPDATE LOCATION ================= */
-
 export function updateMechanicLocationApi(data: {
   requestId: string;
   mechanic_lat: number;
@@ -120,25 +149,21 @@ export function updateMechanicLocationApi(data: {
   return post<ApiResponse>("/api/service/update-location", data);
 }
 
-/* ================= GET ACTIVE ================= */
-
 export function getActiveServiceRequests(mechanicPhone: string) {
   return get<ApiResponse>(
-    `/api/service?mechanicPhone=${encodeURIComponent(mechanicPhone)}`
+    `/api/service?mechanicPhone=${encodeURIComponent(mechanicPhone)}`,
   );
 }
 
-/* ================= HISTORY ================= */
-
 export function getUserHistory(phone: string) {
   return get<ApiResponse>(
-    `/api/service/user-history?phone=${encodeURIComponent(phone)}`
+    `/api/service/user-history?phone=${encodeURIComponent(phone)}`,
   );
 }
 
 export function getMechanicHistory(phone: string) {
   return get<ApiResponse>(
-    `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`
+    `/api/service/mechanic-history?phone=${encodeURIComponent(phone)}`,
   );
 }
 
@@ -169,8 +194,6 @@ async function fetchWithTimeout(
 async function post<T>(path: string, body: unknown): Promise<T> {
   const url = `${BACKEND_URL}${path}`;
 
-  console.log("➡️ POST", url, "Body:", body);
-
   const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
@@ -182,8 +205,6 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
   const text = await res.text();
 
-  console.log("RAW RESPONSE:", text);
-
   let json: any = {};
   try {
     json = text ? JSON.parse(text) : {};
@@ -192,16 +213,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
 
   if (!res.ok) {
-    console.log("❌ API ERROR:", json);
     throw new Error(json?.message || "Request failed");
   }
 
   return json as T;
 }
+
 async function get<T>(path: string): Promise<T> {
   const url = `${BACKEND_URL}${path}`;
-
-  console.log("➡️ GET", url);
 
   const res = await fetchWithTimeout(url, {
     method: "GET",
@@ -212,8 +231,6 @@ async function get<T>(path: string): Promise<T> {
 
   const text = await res.text();
 
-  console.log("RAW RESPONSE:", text);
-
   let json: any = {};
   try {
     json = text ? JSON.parse(text) : {};
@@ -222,7 +239,6 @@ async function get<T>(path: string): Promise<T> {
   }
 
   if (!res.ok) {
-    console.log("❌ API ERROR:", json);
     throw new Error(json?.message || "Request failed");
   }
 

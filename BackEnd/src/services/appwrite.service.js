@@ -23,6 +23,7 @@ try {
       .setKey(config.appwrite.apiKey);
 
     databases = new Databases(client);
+
     info("✅ Appwrite connected");
   } else {
     error("❌ Appwrite configuration missing");
@@ -127,7 +128,7 @@ async function updateMechanicProfile(phone, data) {
       Address: data.Address,
       TypeOfService: data.TypeOfService,
       TypeOfVehicle: data.TypeOfVehicle,
-      Role: data.Role, // 🔥 ADD THIS LINE
+      Role: data.Role,
       latitude: data.latitude,
       longitude: data.longitude,
       Aadhaar_Number: data.Aadhaar_Number,
@@ -135,7 +136,6 @@ async function updateMechanicProfile(phone, data) {
       profile_completed: data.profile_completed,
     };
 
-    // remove undefined values
     Object.keys(allowedFields).forEach(
       (key) => allowedFields[key] === undefined && delete allowedFields[key],
     );
@@ -151,6 +151,7 @@ async function updateMechanicProfile(phone, data) {
     return null;
   }
 }
+
 /* ====================================================
    GET ALL MECHANICS
 ==================================================== */
@@ -163,10 +164,10 @@ async function getAllMechanics() {
       config.appwrite.databaseId,
       config.appwrite.mechanicCollectionId,
       [
-        Query.limit(500), // increased limit
         Query.equal("profile_completed", true),
-        Query.equal("state", "OnDuty"), // only active mechanics
-        Query.orderDesc("$updatedAt"), // latest updated first
+        Query.equal("state", "OnDuty"),
+        Query.orderDesc("$updatedAt"),
+        Query.limit(500),
       ],
     );
   } catch (err) {
@@ -174,6 +175,7 @@ async function getAllMechanics() {
     return { documents: [] };
   }
 }
+
 /* ====================================================
    SERVICE REQUESTS
 ==================================================== */
@@ -201,7 +203,7 @@ async function getAllServiceRequests() {
     return await databases.listDocuments(
       config.appwrite.databaseId,
       config.appwrite.serviceRequestCollectionId,
-      [Query.limit(100), Query.orderDesc("$createdAt")],
+      [Query.orderDesc("$createdAt"), Query.limit(100)],
     );
   } catch (err) {
     error("getAllServiceRequests:", err.message);
@@ -249,8 +251,8 @@ async function getUserHistory(phone) {
       config.appwrite.serviceRequestCollectionId,
       [
         Query.equal("user_phone", phone),
-        Query.limit(100),
         Query.orderDesc("$createdAt"),
+        Query.limit(100),
       ],
     );
   } catch (err) {
@@ -259,25 +261,49 @@ async function getUserHistory(phone) {
   }
 }
 
+// ONLY THIS FUNCTION CHANGED 👇👇👇
+
 async function getMechanicHistory(phone) {
   if (!ensureDatabase()) return { documents: [] };
 
   try {
+    if (!phone) return { documents: [] };
+
+    const clean = phone.replace(/\D/g, "");
+
+    const formats = [];
+
+    if (clean.length === 10) {
+      formats.push(clean);
+      formats.push(`91${clean}`);
+      formats.push(`+91${clean}`);
+    } else if (clean.length === 12) {
+      formats.push(clean);
+      formats.push(`+${clean}`);
+      formats.push(clean.slice(2));
+    } else {
+      formats.push(phone);
+    }
+
+    console.log(" Searching mechanic_phone formats:", formats);
+
     return await databases.listDocuments(
       config.appwrite.databaseId,
       config.appwrite.serviceRequestCollectionId,
       [
-        Query.equal("mechanic_phone", phone),
-        Query.limit(100),
+        Query.or(
+          formats.map((p) => Query.equal("mechanic_phone", p))
+        ),
+        Query.equal("status", "completed"),
         Query.orderDesc("$createdAt"),
-      ],
+        Query.limit(100),
+      ]
     );
   } catch (err) {
     error("getMechanicHistory:", err.message);
     return { documents: [] };
   }
 }
-
 /* ====================================================
    EXPORTS
 ==================================================== */

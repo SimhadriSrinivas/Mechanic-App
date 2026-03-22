@@ -24,11 +24,9 @@ export type CreateRequestPayload = {
 ===================================================== */
 
 export async function createRequest(
-  payload: CreateRequestPayload
+  payload: CreateRequestPayload,
 ): Promise<string> {
   try {
-    console.log("📤 Sending request body:", payload);
-
     const response = await createServiceRequest({
       userPhone: payload.userPhone,
       service: payload.service,
@@ -36,20 +34,15 @@ export async function createRequest(
       userLat: payload.lat,
       userLng: payload.lng,
     });
-
-    console.log("📥 createRequest response:", response);
-
     if (!response?.success) {
       throw new Error(response?.message || "Failed to create request");
     }
-
     if (!response.data?.$id) {
       throw new Error("Server did not return request ID");
     }
-
     return response.data.$id;
   } catch (error: any) {
-    console.error("❌ createRequest error:", error?.message || error);
+    console.error("createRequest error:", error?.message || error);
     throw error;
   }
 }
@@ -60,10 +53,8 @@ export async function createRequest(
 
 export function listenRequest(
   requestId: string,
-  cb: (doc: any) => void
+  cb: (doc: any) => void,
 ): Unsubscribe {
-  console.log("🔁 Starting polling for request:", requestId);
-
   const interval = setInterval(async () => {
     try {
       const response = await getServiceRequestByIdApi(requestId);
@@ -71,9 +62,7 @@ export function listenRequest(
       if (response?.success && response?.data) {
         cb(response.data);
       }
-    } catch (error) {
-      console.log("Polling error ignored");
-    }
+    } catch (error) {}
   }, 3000); // Poll every 3 seconds
 
   return () => {
@@ -96,9 +85,9 @@ export async function cancelRequest(requestId: string) {
       throw new Error(response?.message || "Cancel failed");
     }
 
-    console.log("✅ Request cancelled");
-  } catch (error) {
-    console.error("❌ cancelRequest failed:", error);
+    return response;
+  } catch (error: any) {
+    throw new Error(error?.message || "Cancel failed");
   }
 }
 
@@ -109,7 +98,7 @@ export async function cancelRequest(requestId: string) {
 export async function updateMechanicLocation(
   requestId: string,
   lat: number,
-  lng: number
+  lng: number,
 ) {
   try {
     if (!requestId) return;

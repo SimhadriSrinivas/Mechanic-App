@@ -1,52 +1,73 @@
 import React, { useEffect, useState, useContext, useRef } from "react";
-import {
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-} from "react-native";
+import { StyleSheet, ActivityIndicator, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams } from "expo-router";
 
 import DutyMap from "./components/DutyMap";
-import StatusCard from "./components/StatusCard";
 import ReferEarnCard from "./components/ReferEarnCard";
+import TopNavBar from "./components/TopNavBar";
+import RequestBottomSheet from "./components/bottom-sheet/RequestBottomSheet";
+import StatusCard from "./components/StatusCard";
 
 import { getMechanicRegStep, getLoggedInPhone } from "../../../utils/storage";
 import { DutyContext } from "../_layout";
 import { useRouter } from "expo-router";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL!;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "";
 
 export default function MechanicHome() {
   const router = useRouter();
-  const { onDuty } = useContext(DutyContext);
+  const params = useLocalSearchParams();
+
+  const { onDuty, toggleDuty } = useContext(DutyContext);
 
   const [checking, setChecking] = useState(true);
   const [requests, setRequests] = useState<any[]>([]);
   const [mechanicPhone, setMechanicPhone] = useState("");
-  const [lockedAcceptedRequest, setLockedAcceptedRequest] =
-    useState<any | null>(null);
+  const [acceptedRequest, setAcceptedRequest] = useState<any | null>(null);
 
+  const acceptedRequestRef = useRef<any | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ================= INIT ================= */
+
   useEffect(() => {
-    (async () => {
-      const step = await getMechanicRegStep();
-      if (step !== "done") {
-        router.replace("/(auth)/mechanic-register");
-        return;
+    const init = async () => {
+      try {
+        const step = await getMechanicRegStep();
+
+        if (step !== "done") {
+          router.replace("/(auth)/mechanic-register");
+          return;
+        }
+
+        const phone = await getLoggedInPhone();
+        if (phone) setMechanicPhone(phone);
+      } catch (err) {
+        console.log("Init error:", err);
+      } finally {
+        setChecking(false);
       }
+    };
 
-      const phone = await getLoggedInPhone();
-      if (phone) setMechanicPhone(phone);
+    init();
+  }, []);
 
-      setChecking(false);
-    })();
+  /* ================= KEEP SCREEN AWAKE ================= */
+
+  useEffect(() => {
+    activateKeepAwakeAsync().catch(console.warn);
+    return () => {
+      deactivateKeepAwake().catch(console.warn);
+    };
   }, []);
 
   /* ================= FETCH REQUESTS ================= */
+
   const fetchRequests = async () => {
-    if (!mechanicPhone) return;
+    if (!mechanicPhone || !API_URL) return;
 
     try {
       const res = await fetch(
@@ -55,25 +76,27 @@ export default function MechanicHome() {
       );
 
       const data = await res.json();
+      if (!data?.success) return;
 
-      if (data.success) {
-        const newRequests = data.requests || [];
-        setRequests(newRequests);
+      const newRequests = data.requests || [];
 
-        // 🔥 LOCK accepted request immediately
-        const accepted = newRequests.find(
-          (r: any) => r.status === "accepted"
-        );
+      setRequests(newRequests);
 
-        if (accepted) {
-          setLockedAcceptedRequest(accepted);
+      const accepted = newRequests.find((r: any) => r.status === "accepted");
 
-          // stop polling once accepted
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        }
+      if (accepted) {
+        const req = {
+          ...accepted,
+          user_lat: Number(accepted.user_lat),
+          user_lng: Number(accepted.user_lng),
+          user_phone: accepted.user_phone || "",
+        };
+
+        acceptedRequestRef.current = req;
+        setAcceptedRequest(req);
+      } else {
+        acceptedRequestRef.current = null;
+        setAcceptedRequest(null);
       }
     } catch (err) {
       console.log("Fetch error:", err);
@@ -81,15 +104,15 @@ export default function MechanicHome() {
   };
 
   /* ================= POLLING ================= */
+
   useEffect(() => {
     if (!onDuty || !mechanicPhone) {
       setRequests([]);
-      setLockedAcceptedRequest(null);
+      setAcceptedRequest(null);
+
+      if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
-
-    // already accepted → no polling
-    if (lockedAcceptedRequest) return;
 
     fetchRequests();
 
@@ -98,9 +121,21 @@ export default function MechanicHome() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [onDuty, mechanicPhone, lockedAcceptedRequest]);
+  }, [onDuty, mechanicPhone]);
 
-  /* ================= LOADING ================= */
+  /* 🔥 REFRESH AFTER PAYMENT */
+  useEffect(() => {
+    if (params.refresh) {
+      fetchRequests();
+    }
+  }, [params.refresh]);
+
+  /* ================= REMOVE REQUEST ================= */
+
+  const removeRequest = (id: string) => {
+    setRequests((prev) => prev.filter((r) => r.$id !== id));
+  };
+
   if (checking) {
     return (
       <SafeAreaView style={styles.center}>
@@ -109,50 +144,55 @@ export default function MechanicHome() {
     );
   }
 
-  /* ================= REQUEST LOGIC ================= */
+  const pendingRequests = requests.filter((r) => r.status === "pending");
 
-  const acceptedRequest =
-    lockedAcceptedRequest ||
-    requests.find((r) => r.status === "accepted");
-
-  const pendingRequests = requests.filter(
-    (r) => r.status === "pending"
-  );
-
-  /* ================= UI ================= */
   return (
     <SafeAreaView style={styles.container}>
-      {/* OFF DUTY */}
+      <TopNavBar onDuty={onDuty} toggleDuty={toggleDuty} onLogout={() => {}} />
+
       {!onDuty && <ReferEarnCard />}
 
-      {/* ON DUTY */}
       {onDuty && (
         <>
-          {/* 🔵 IF ACCEPTED → FULL SCREEN MAP */}
+          {/* 🔥 MAP ALWAYS */}
+          <DutyMap acceptedRequest={acceptedRequest} />
+
+          {/* 🔥 SHOW ONLY WHEN REQUEST EXISTS */}
+          {!acceptedRequest && (
+            <LinearGradient
+              colors={["#f8fafc", "#eef2f6"]}
+              style={[
+                styles.requestBackground,
+                {
+                  display: pendingRequests.length === 0 ? "none" : "flex",
+                },
+              ]}
+            >
+              <View style={styles.requestContainer}>
+                {pendingRequests.map((req: any) => (
+                  <StatusCard
+                    key={req.$id}
+                    requestId={req.$id}
+                    userPhone={req.user_phone}
+                    status={req.status}
+                    userLat={Number(req.user_lat)}
+                    userLng={Number(req.user_lng)}
+                    vehicleType={req.vehicle_type}
+                    onAccepted={fetchRequests}
+                    onCancelled={removeRequest}
+                  />
+                ))}
+              </View>
+            </LinearGradient>
+          )}
+
+          {/* ACTIVE JOB */}
           {acceptedRequest && (
-            <DutyMap acceptedRequest={acceptedRequest} />
-          )}
-
-          {/* 🟢 IF ONLY PENDING */}
-          {!acceptedRequest && pendingRequests.length > 0 && (
-            <ScrollView contentContainerStyle={styles.requestScreen}>
-              {pendingRequests.map((req: any) => (
-                <StatusCard
-                  key={req.$id}
-                  requestId={req.$id}
-                  userPhone={req.user_phone}
-                  status={req.status}
-                  userLat={Number(req.user_lat)}
-                  userLng={Number(req.user_lng)}
-                  vehicleType={req.vehicle_type}
-                />
-              ))}
-            </ScrollView>
-          )}
-
-          {/* 🟡 IF NO REQUESTS */}
-          {!acceptedRequest && pendingRequests.length === 0 && (
-            <DutyMap />
+            <RequestBottomSheet
+              acceptedRequest={acceptedRequest}
+              pendingRequests={pendingRequests}
+              onAccepted={fetchRequests}
+            />
           )}
         </>
       )}
@@ -165,15 +205,25 @@ export default function MechanicHome() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#eef2f6",
   },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  requestScreen: {
-    padding: 20,
-    paddingBottom: 80,
+
+  requestBackground: {
+    position: "absolute",
+    top: 110,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  requestContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
   },
 });

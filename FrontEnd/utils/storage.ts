@@ -19,6 +19,9 @@ const KEY_MECH_REG_FORM = "mechanic_reg_form";
 const KEY_MECH_DUTY_STATUS = "mechanic_duty_status";
 const KEY_MECH_LAST_LOCATION = "mechanic_last_location";
 
+// User active service request (persist tracking screen state across reloads)
+const KEY_USER_ACTIVE_REQUEST_ID = "user_active_request_id";
+
 /* ================= TYPES ================= */
 
 export type UserRole = "user" | "mechanic";
@@ -51,7 +54,7 @@ export async function saveUserRole(role: UserRole) {
 export async function saveMechanicProfileCompleted(value: boolean) {
   await AsyncStorage.setItem(
     KEY_MECHANIC_PROFILE_COMPLETED,
-    value ? "true" : "false"
+    value ? "true" : "false",
   );
 }
 
@@ -81,13 +84,8 @@ export async function hasMechanicProfileFlag(): Promise<boolean> {
 /**
  * Save mechanic profile data (name + phone)
  */
-export async function saveMechanicProfileData(
-  data: StoredMechanicProfile
-) {
-  await AsyncStorage.setItem(
-    KEY_MECHANIC_PROFILE_DATA,
-    JSON.stringify(data)
-  );
+export async function saveMechanicProfileData(data: StoredMechanicProfile) {
+  await AsyncStorage.setItem(KEY_MECHANIC_PROFILE_DATA, JSON.stringify(data));
 }
 
 /**
@@ -160,10 +158,7 @@ export async function getMechanicDutyStatus(): Promise<boolean | null> {
 /* ================= MECHANIC LOCATION (MAP) ================= */
 
 export async function saveLastMechanicLocation(location: StoredLocation) {
-  await AsyncStorage.setItem(
-    KEY_MECH_LAST_LOCATION,
-    JSON.stringify(location)
-  );
+  await AsyncStorage.setItem(KEY_MECH_LAST_LOCATION, JSON.stringify(location));
 }
 
 export async function getLastMechanicLocation(): Promise<StoredLocation | null> {
@@ -173,6 +168,20 @@ export async function getLastMechanicLocation(): Promise<StoredLocation | null> 
 
 export async function clearLastMechanicLocation() {
   await AsyncStorage.removeItem(KEY_MECH_LAST_LOCATION);
+}
+
+/* ================= USER ACTIVE REQUEST ================= */
+
+export async function saveActiveUserRequestId(requestId: string) {
+  await AsyncStorage.setItem(KEY_USER_ACTIVE_REQUEST_ID, requestId);
+}
+
+export async function getActiveUserRequestId(): Promise<string | null> {
+  return AsyncStorage.getItem(KEY_USER_ACTIVE_REQUEST_ID);
+}
+
+export async function clearActiveUserRequestId() {
+  await AsyncStorage.removeItem(KEY_USER_ACTIVE_REQUEST_ID);
 }
 
 /* ================= RESET HELPERS ================= */
@@ -198,5 +207,6 @@ export async function clearAuthStorage() {
     KEY_MECH_REG_FORM,
     KEY_MECH_DUTY_STATUS,
     KEY_MECH_LAST_LOCATION,
+    KEY_USER_ACTIVE_REQUEST_ID,
   ]);
 }

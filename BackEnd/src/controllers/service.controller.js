@@ -10,17 +10,29 @@ const {
 } = require("../services/appwrite.service");
 
 /* =====================================
+   PHONE NORMALIZER
+===================================== */
+
+function normalizePhone(phone) {
+  if (!phone) return "";
+
+  let cleaned = phone.toString().trim();
+  cleaned = cleaned.replace(/\s+/g, "");
+
+  if (cleaned.startsWith("+")) {
+    cleaned = cleaned.substring(1);
+  }
+
+  return cleaned;
+}
+
+/* =====================================
    CREATE REQUEST
 ===================================== */
+
 async function createRequest(req, res) {
   try {
-    const {
-      user_phone,
-      user_lat,
-      user_lng,
-      service,
-      vehicle_type,
-    } = req.body;
+    let { user_phone, user_lat, user_lng, service, vehicle_type } = req.body;
 
     if (
       !user_phone ||
@@ -35,6 +47,8 @@ async function createRequest(req, res) {
       });
     }
 
+    user_phone = normalizePhone(user_phone);
+
     const request = await createServiceRequest({
       user_phone,
       user_lat,
@@ -46,7 +60,6 @@ async function createRequest(req, res) {
       mechanic_lat: null,
       mechanic_lng: null,
       acceptedAt: null,
-      cancelled_by: null,
     });
 
     return res.status(201).json({
@@ -55,6 +68,7 @@ async function createRequest(req, res) {
     });
   } catch (err) {
     console.error("createRequest error:", err);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -63,12 +77,12 @@ async function createRequest(req, res) {
 }
 
 /* =====================================
-   ACCEPT REQUEST (SAFE LOCK VERSION)
+   ACCEPT REQUEST
 ===================================== */
+
 async function acceptRequest(req, res) {
   try {
-    const { requestId, mechanic_phone, mechanic_lat, mechanic_lng } =
-      req.body;
+    let { requestId, mechanic_phone, mechanic_lat, mechanic_lng } = req.body;
 
     if (!requestId || !mechanic_phone) {
       return res.status(400).json({
@@ -77,22 +91,7 @@ async function acceptRequest(req, res) {
       });
     }
 
-    const allRequests = await getAllServiceRequests();
-    const docs = allRequests?.documents || [];
-
-    // 🔥 Check if mechanic already has active job
-    const alreadyActive = docs.find(
-      (r) =>
-        r.status === "accepted" &&
-        r.mechanic_phone === mechanic_phone
-    );
-
-    if (alreadyActive) {
-      return res.status(409).json({
-        success: false,
-        message: "Mechanic already has an active job",
-      });
-    }
+    mechanic_phone = normalizePhone(mechanic_phone);
 
     const existing = await getServiceRequestById(requestId);
 
@@ -110,6 +109,21 @@ async function acceptRequest(req, res) {
       });
     }
 
+    const allRequests = await getAllServiceRequests();
+    const docs = allRequests?.documents || [];
+
+    const alreadyActive = docs.find((r) => {
+      const reqPhone = normalizePhone(r.mechanic_phone);
+      return r.status === "accepted" && reqPhone === mechanic_phone;
+    });
+
+    if (alreadyActive) {
+      return res.status(409).json({
+        success: false,
+        message: "Mechanic already has an active job",
+      });
+    }
+
     const updated = await updateServiceRequest(requestId, {
       status: "accepted",
       mechanic_phone,
@@ -124,6 +138,7 @@ async function acceptRequest(req, res) {
     });
   } catch (err) {
     console.error("acceptRequest error:", err);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -132,8 +147,9 @@ async function acceptRequest(req, res) {
 }
 
 /* =====================================
-   UPDATE LOCATION
+   UPDATE MECHANIC LOCATION
 ===================================== */
+
 async function updateMechanicLocation(req, res) {
   try {
     const { requestId, mechanic_lat, mechanic_lng } = req.body;
@@ -156,6 +172,7 @@ async function updateMechanicLocation(req, res) {
     });
   } catch (err) {
     console.error("updateMechanicLocation error:", err);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -164,11 +181,111 @@ async function updateMechanicLocation(req, res) {
 }
 
 /* =====================================
-   GET ACTIVE REQUESTS (FIXED FILTER)
+   CANCEL SERVICE
 ===================================== */
+
+async function cancelRequest(req, res) {
+  try {
+    const { requestId } = req.body;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        message: "requestId required",
+      });
+    }
+
+    const existing = await getServiceRequestById(requestId);
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Request not found",
+      });
+    }
+
+    if (existing.status === "cancelled" || existing.status === "completed") {
+      return res.json({
+        success: true,
+        message: "Request already finalized",
+        data: existing,
+      });
+    }
+
+    const updated = await updateServiceRequest(requestId, {
+      status: "cancelled",
+      cancelledAt: new Date().toISOString(),
+      user_phone: null,
+    });
+
+    return res.json({
+      success: true,
+      data: updated,
+    });
+  } catch (err) {
+    console.error("cancelRequest error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/* =====================================
+   COMPLETE SERVICE (🔥 NEW)
+===================================== */
+
+async function completeService(req, res) {
+  try {
+    const { requestId, amount, issue_description, payment_type } = req.body;
+
+    if (!requestId || amount === undefined || !payment_type) {
+      return res.status(400).json({
+        success: false,
+        message: "requestId, amount, payment_type required",
+      });
+    }
+
+    const existing = await getServiceRequestById(requestId);
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Request not found",
+      });
+    }
+
+    const updated = await updateServiceRequest(requestId, {
+      amount: Number(amount),
+      issue_description: issue_description || "",
+      payment_type,
+      status: "completed",
+      call_completed_at: new Date().toISOString(),
+    });
+
+    return res.json({
+      success: true,
+      message: "Service completed successfully",
+      data: updated,
+    });
+  } catch (err) {
+    console.error("completeService error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/* =====================================
+   GET ACTIVE REQUESTS
+===================================== */
+
 async function getActiveServiceRequests(req, res) {
   try {
-    const { mechanicPhone, vehicleTypes } = req.query;
+    let { mechanicPhone } = req.query;
 
     if (!mechanicPhone) {
       return res.status(400).json({
@@ -177,41 +294,35 @@ async function getActiveServiceRequests(req, res) {
       });
     }
 
+    mechanicPhone = normalizePhone(mechanicPhone);
+
     const result = await getAllServiceRequests();
     const docs = result?.documents || [];
 
-    let mechanicVehicles = [];
-
-    if (vehicleTypes) {
-      mechanicVehicles = vehicleTypes.split(",");
-    }
-
     const filtered = docs.filter((r) => {
-      // Pending requests only for matching vehicle type
-      if (
-        r.status === "pending" &&
-        mechanicVehicles.includes(r.vehicle_type)
-      ) {
-        return true;
-      }
+      if (r.status === "pending") return true;
 
-      // Accepted request only for this mechanic
-      if (
-        r.status === "accepted" &&
-        r.mechanic_phone === mechanicPhone
-      ) {
+      const reqPhone = normalizePhone(r.mechanic_phone);
+
+      if (r.status === "accepted" && reqPhone === mechanicPhone) {
         return true;
       }
 
       return false;
     });
 
+    const sanitized = filtered.map((r) => ({
+      ...r,
+      user_phone: null,
+    }));
+
     return res.json({
       success: true,
-      requests: filtered,
+      requests: sanitized,
     });
   } catch (err) {
     console.error("getActiveServiceRequests error:", err);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -222,31 +333,93 @@ async function getActiveServiceRequests(req, res) {
 /* =====================================
    HISTORY
 ===================================== */
-async function userHistory(req, res) {
-  const { phone } = req.query;
-  const history = await getUserHistory(phone);
 
-  return res.json({
-    success: true,
-    data: history?.documents || [],
-  });
+async function userHistory(req, res) {
+  try {
+    const { phone } = req.query;
+
+    const history = await getUserHistory(phone);
+
+    return res.json({
+      success: true,
+      data: history?.documents || [],
+    });
+  } catch (err) {
+    console.error("userHistory error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 }
 
 async function mechanicHistory(req, res) {
-  const { phone } = req.query;
-  const history = await getMechanicHistory(phone);
+  try {
+    const { phone } = req.query;
 
-  return res.json({
-    success: true,
-    data: history?.documents || [],
-  });
+    const history = await getMechanicHistory(phone);
+
+    return res.json({
+      success: true,
+      data: history?.documents || [],
+    });
+  } catch (err) {
+    console.error("mechanicHistory error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/* =====================================
+   GET SERVICE REQUEST BY ID
+===================================== */
+
+async function getRequestById(req, res) {
+  try {
+    const { requestId } = req.params;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        message: "requestId required",
+      });
+    }
+
+    const request = await getServiceRequestById(requestId);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Service request not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: request,
+    });
+  } catch (err) {
+    console.error("getRequestById error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 }
 
 module.exports = {
   createRequest,
   acceptRequest,
   updateMechanicLocation,
+  cancelRequest,
   getActiveServiceRequests,
   userHistory,
   mechanicHistory,
+  completeService,
+  getRequestById,
 };

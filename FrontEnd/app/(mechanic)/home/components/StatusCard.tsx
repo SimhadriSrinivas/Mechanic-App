@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Modal,
+  Pressable,
 } from "react-native";
 import * as Location from "expo-location";
 import { getLoggedInPhone } from "@/utils/storage";
-import { useRouter } from "expo-router";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -20,47 +20,44 @@ type Props = {
   userLat: number;
   userLng: number;
   vehicleType?: string;
+  onAccepted?: () => void;
+  onCancelled?: (id: string) => void;
 };
 
 export default function StatusCard({
   requestId,
-  userPhone,
   status,
   userLat,
   userLng,
   vehicleType,
+  onAccepted,
+  onCancelled,
 }: Props) {
-  const router = useRouter();
-
   const [loading, setLoading] = useState(false);
   const [distanceKm, setDistanceKm] = useState("0");
-  const [pickupAddress, setPickupAddress] = useState("Loading...");
-  const [mechanicAddress, setMechanicAddress] = useState("Loading...");
-  const [mechanicCoords, setMechanicCoords] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [pickupAddress, setPickupAddress] = useState("Fetching...");
+  const [mechanicAddress, setMechanicAddress] = useState("Fetching...");
+  const [mechanicCoords, setMechanicCoords] = useState<any>(null);
 
-  /* ================= LOAD LOCATION ================= */
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
-      const permission =
-        await Location.requestForegroundPermissionsAsync();
-
-      if (permission.status !== "granted") {
-        Alert.alert("Location permission denied");
-        return;
-      }
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") return;
 
       const mech = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
       });
 
-      setMechanicCoords(mech.coords);
+      setMechanicCoords({
+        latitude: mech.coords.latitude,
+        longitude: mech.coords.longitude,
+      });
 
       const dist = calculateDistance(
         mech.coords.latitude,
@@ -71,29 +68,27 @@ export default function StatusCard({
 
       setDistanceKm(dist);
 
-      const userAddr = await Location.reverseGeocodeAsync({
-        latitude: userLat,
-        longitude: userLng,
-      });
+      const [userAddr, mechAddr] = await Promise.all([
+        Location.reverseGeocodeAsync({
+          latitude: userLat,
+          longitude: userLng,
+        }),
+        Location.reverseGeocodeAsync({
+          latitude: mech.coords.latitude,
+          longitude: mech.coords.longitude,
+        }),
+      ]);
 
-      if (userAddr.length > 0) {
+      if (userAddr.length > 0)
         setPickupAddress(formatAddress(userAddr[0]));
-      }
 
-      const mechAddr = await Location.reverseGeocodeAsync({
-        latitude: mech.coords.latitude,
-        longitude: mech.coords.longitude,
-      });
-
-      if (mechAddr.length > 0) {
+      if (mechAddr.length > 0)
         setMechanicAddress(formatAddress(mechAddr[0]));
-      }
     } catch (err) {
-      console.log("Location error:", err);
+      console.log(err);
     }
   };
 
-  /* ================= DISTANCE ================= */
   const calculateDistance = (
     lat1: number,
     lon1: number,
@@ -112,39 +107,24 @@ export default function StatusCard({
         Math.cos(toRad(lat2)) *
         Math.sin(dLon / 2) ** 2;
 
-    return (
-      R *
-      2 *
-      Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    ).toFixed(1);
+    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
   };
 
   const formatAddress = (a: any) => {
-    return `${a.street || ""}, ${
-      a.city || a.subregion || ""
-    }, ${a.region || ""} - ${a.postalCode || ""}`;
+    return `${a.street || ""}, ${a.city || a.subregion || ""}, ${
+      a.region || ""
+    }`;
   };
 
-  /* ================= ACCEPT REQUEST ================= */
   const acceptRequest = async () => {
     try {
-      if (!API_URL) return;
-      if (!mechanicCoords) {
-        Alert.alert("Waiting for location...");
-        return;
-      }
-      if (loading) return;
+      if (!API_URL || !mechanicCoords) return;
 
       setLoading(true);
 
       const mechanicPhone = await getLoggedInPhone();
 
-      if (!mechanicPhone) {
-        Alert.alert("Not logged in");
-        return;
-      }
-
-      const res = await fetch(`${API_URL}/api/service/accept`, {
+      await fetch(`${API_URL}/api/service/accept`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,131 +138,251 @@ export default function StatusCard({
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data?.message || "Accept failed");
-      }
-
-      /* 🔥 Navigate back to Home screen */
-      router.replace({
-        pathname: "/(mechanic)/home",
-        params: {
-          requestId,
-          userLat: String(userLat),
-          userLng: String(userLng),
-          userPhone,
-        },
-      });
-
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Accept failed");
+      onAccepted?.();
+    } catch (err) {
+      console.log(err);
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= UI ================= */
+  const confirmCancel = () => {
+    setShowCancelModal(false);
+    onCancelled?.(requestId);
+  };
+
   return (
-    <View style={styles.wrapper}>
+    <>
       <View style={styles.card}>
-        <Text style={styles.mainKm}>{distanceKm} KM</Text>
+        <View style={styles.topRow}>
+          <Text style={styles.distance}>{distanceKm} km away</Text>
 
-        <View style={styles.vehicleBadge}>
-          <Text style={styles.vehicleText}>
-            {vehicleType?.toUpperCase() || "VEHICLE"}
-          </Text>
+          <View style={styles.vehicleBadge}>
+            <Text style={styles.vehicleText}>
+              {vehicleType?.toUpperCase() || "VEHICLE"}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.locationBlock}>
-          <Text style={styles.zeroKm}>User Location</Text>
-          <Text style={styles.address}>{pickupAddress}</Text>
+        <View style={styles.locationRow}>
+          <View style={styles.dotColumn}>
+            <View style={styles.pickupDot} />
+            <View style={styles.line} />
+            <View style={styles.mechanicDot} />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.locationLabel}>Pickup</Text>
+            <Text style={styles.address}>{pickupAddress}</Text>
+
+            <Text style={[styles.locationLabel, { marginTop: 12 }]}>
+              Your Location
+            </Text>
+            <Text style={styles.address}>{mechanicAddress}</Text>
+          </View>
         </View>
 
-        <View style={styles.verticalLine} />
+        <TouchableOpacity
+          style={styles.acceptBtn}
+          onPress={acceptRequest}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.acceptText}>ACCEPT REQUEST</Text>
+          )}
+        </TouchableOpacity>
 
-        <View style={styles.locationBlock}>
-          <Text style={styles.destKm}>Your Location</Text>
-          <Text style={styles.address}>{mechanicAddress}</Text>
-        </View>
-
-        {status === "pending" && (
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={acceptRequest}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.acceptText}>ACCEPT</Text>
-            )}
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.cancelBtn}
+          onPress={() => setShowCancelModal(true)}
+        >
+          <Text style={styles.cancelText}>Cancel Request</Text>
+        </TouchableOpacity>
       </View>
-    </View>
+
+      <Modal transparent visible={showCancelModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Cancel Request</Text>
+
+            <Text style={styles.modalSubtitle}>
+              Are you sure you want to remove this request?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.modalCancel}
+                onPress={() => setShowCancelModal(false)}
+              >
+                <Text style={styles.modalCancelText}>No</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modalConfirm}
+                onPress={confirmCancel}
+              >
+                <Text style={styles.modalConfirmText}>Yes</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: 28,
-    paddingHorizontal: 20,
-    paddingLeft: 50,
-  },
   card: {
-    borderWidth: 2,
-    borderColor: "#000",
-    padding: 20,
     backgroundColor: "#fff",
-    borderRadius: 12,
-  },
-  mainKm: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 14,
-  },
-  vehicleBadge: {
-    borderWidth: 1,
-    borderColor: "#000",
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    alignSelf: "flex-start",
+    borderRadius: 20,
+    padding: 22,
     marginBottom: 16,
+    elevation: 6,
   },
+
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+
+  distance: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+
+  vehicleBadge: {
+    backgroundColor: "#e8f0ff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+
   vehicleText: {
-    fontWeight: "600",
+    color: "#2563eb",
+    fontWeight: "700",
   },
-  locationBlock: {
-    marginBottom: 10,
+
+  locationRow: {
+    flexDirection: "row",
   },
-  zeroKm: {
-    fontWeight: "600",
+
+  dotColumn: {
+    width: 20,
+    alignItems: "center",
+    marginRight: 10,
   },
-  destKm: {
-    fontWeight: "600",
+
+  pickupDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#22c55e",
   },
+
+  mechanicDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2563eb",
+  },
+
+  line: {
+    width: 2,
+    height: 30,
+    backgroundColor: "#cbd5e1",
+  },
+
+  locationLabel: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+
   address: {
     fontSize: 14,
-    marginTop: 4,
   },
-  verticalLine: {
-    borderLeftWidth: 2,
-    height: 50,
-    marginVertical: 10,
-  },
+
   acceptBtn: {
     marginTop: 20,
-    backgroundColor: "#1565C0",
+    backgroundColor: "#2563eb",
     paddingVertical: 16,
+    borderRadius: 14,
     alignItems: "center",
-    borderRadius: 12,
   },
+
   acceptText: {
     color: "#fff",
     fontWeight: "700",
+    fontSize: 16,
+  },
+
+  cancelBtn: {
+    marginTop: 10,
+    backgroundColor: "rgba(239,68,68,0.08)",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  cancelText: {
+    color: "#ef4444",
+    fontWeight: "600",
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalCard: {
+    width: "85%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 22,
+  },
+
+  modalTitle: {
     fontSize: 18,
+    fontWeight: "700",
+  },
+
+  modalSubtitle: {
+    marginTop: 8,
+    color: "#64748b",
+  },
+
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 20,
+  },
+
+  modalCancel: {
+    backgroundColor: "#ebe9e9",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+
+  modalCancelText: {
+    color: "#64748b",
+    fontWeight: "600",
+  },
+
+  modalConfirm: {
+    backgroundColor: "#ef4444",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+
+  modalConfirmText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 });
