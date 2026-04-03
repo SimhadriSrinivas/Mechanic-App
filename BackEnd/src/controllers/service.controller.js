@@ -311,10 +311,16 @@ async function getActiveServiceRequests(req, res) {
       return false;
     });
 
-    const sanitized = filtered.map((r) => ({
-      ...r,
-      user_phone: null,
-    }));
+    const sanitized = filtered.map((r) => {
+      const reqPhone = normalizePhone(r.mechanic_phone);
+      const canViewPhone =
+        r.status === "accepted" && reqPhone === mechanicPhone;
+
+      return {
+        ...r,
+        user_phone: canViewPhone ? r.user_phone : null,
+      };
+    });
 
     return res.json({
       success: true,

@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MechanicCard from "./components/MechanicCard";
 import LoadingBars from "./components/LoadingBars";
@@ -121,10 +122,32 @@ export default function Tracking() {
 
   /* ================= LOAD ICON ================= */
   useEffect(() => {
-    const asset = Asset.fromModule(
-      require("../../../assets/images/Mechnaic-icon.webp"),
-    );
-    setIconUri(asset.uri);
+    const loadIcon = async () => {
+      const asset = Asset.fromModule(
+        require("../../../assets/images/Mechanic-icon.png"),
+      );
+
+      await asset.downloadAsync();
+
+      const uri = asset.localUri || asset.uri;
+      if (!uri) return;
+
+      if (Platform.OS === "web") {
+        setIconUri(uri);
+        return;
+      }
+
+      try {
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setIconUri(`data:image/png;base64,${base64}`);
+      } catch {
+        setIconUri(uri);
+      }
+    };
+
+    loadIcon();
   }, []);
 
   /* ================= LOCATION ================= */
@@ -401,8 +424,7 @@ export default function Tracking() {
 <style>
 html,body,#map{height:100%;margin:0;padding:0;}
 .leaflet-div-icon{background:transparent;border:none;}
-.user-dot{width:18px;height:18px;background:#007AFF;border-radius:50%;border:3px solid white;box-shadow:0 0 0 8px rgba(0,122,255,0.2);}
-.mechanic-icon{width:64px;height:64px;background-image:url('${iconUri}');background-size:contain;background-repeat:no-repeat;}
+.user-dot{width:16px;height:16px;background:#2563eb;border-radius:50%;border:3px solid white;box-shadow:0 0 0 6px rgba(37,99,235,0.2);}
 </style>
 </head>
 <body>
@@ -416,17 +438,79 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 //  USER MARKER
 let userIcon = L.divIcon({
   html:'<div class="user-dot"></div>',
-  iconSize:[24,24],
-  iconAnchor:[12,12],
+  iconSize:[16,16],
+  iconAnchor:[8,8],
 });
 L.marker([${coords.latitude},${coords.longitude}],{icon:userIcon}).addTo(map);
 
 //  MECHANICS
 let mechanicMarkers=[];
+/* Mechanic marker SVG (top view) */
+const svg = \`<svg xmlns="http://www.w3.org/2000/svg"
+  width="100%" height="100%" viewBox="0 0 52 52"
+  style="filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5))">
+
+  <!-- Front wheel -->
+  <g transform="rotate(90 26 8)">
+    <rect x="18.5" y="5.2" width="15" height="5.6" rx="2.8" fill="#0b0f14" stroke="#374151" stroke-width="0.8"/>
+    <line x1="20" y1="8" x2="32" y2="8" stroke="#6b7280" stroke-width="0.5" opacity="0.45"/>
+  </g>
+
+  <!-- Steering and fork -->
+  <rect x="25.2" y="10.7" width="1.6" height="4.1" rx="0.8" fill="#1f2937"/>
+  <rect x="15.7" y="14.3" width="20.6" height="3.3" rx="1.6" fill="#1f2937" stroke="#374151" stroke-width="0.45"/>
+
+  <!-- Main frame -->
+  <path d="M23.6 17.8 L24.8 42.9 L27.2 42.9 L28.4 17.8Z" fill="#0f172a"/>
+  <rect x="25.35" y="18.9" width="1.3" height="22.2" rx="0.65" fill="#1e293b"/>
+
+  <!-- Body panel -->
+  <rect x="21.8" y="21.4" width="8.4" height="9.4" rx="2.4" fill="#1e3a5f" stroke="#2563eb" stroke-width="0.9"/>
+  <line x1="23.1" y1="24" x2="28.9" y2="24" stroke="#3b82f6" stroke-width="0.55" opacity="0.8"/>
+  <line x1="23.1" y1="26" x2="28.9" y2="26" stroke="#3b82f6" stroke-width="0.55" opacity="0.8"/>
+  <line x1="23.1" y1="28" x2="28.9" y2="28" stroke="#3b82f6" stroke-width="0.55" opacity="0.55"/>
+
+  <!-- Rear wheel (moved slightly to front) -->
+  <g transform="translate(0 -7.8) rotate(90 26 46)">
+    <rect x="18.6" y="43" width="14.8" height="5.8" rx="2.9" fill="#0b0f14" stroke="#374151" stroke-width="0.8"/>
+    <line x1="20" y1="46" x2="32" y2="46" stroke="#6b7280" stroke-width="0.5" opacity="0.45"/>
+  </g>
+
+  <!-- Rider torso -->
+  <path d="M19.1 18.7 Q19 16.9 26 16.9 Q33 16.9 32.9 18.7 L32.1 28 Q32 30.6 26 30.6 Q20 30.6 19.9 28Z"
+        fill="#0f172a" stroke="#1d4ed8" stroke-width="0.8"/>
+  <line x1="26" y1="17.3" x2="26" y2="30" stroke="#1e40af" stroke-width="0.75" opacity="0.6"/>
+
+  <!-- Arms and hands -->
+  <path d="M20.8 21 Q18.7 20 17.2 18.2" stroke="#1f2937" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M31.2 21 Q33.3 20 34.8 18.2" stroke="#1f2937" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <circle cx="17" cy="18" r="1.2" fill="#475569"/>
+  <circle cx="35" cy="18" r="1.2" fill="#475569"/>
+
+  <!-- Tool bag -->
+  <path d="M31.2 32.3 L32.4 33.4" stroke="#1f2937" stroke-width="1" stroke-linecap="round"/>
+  <rect x="32.2" y="31.2" width="8.8" height="7.6" rx="1.8" fill="#1e3a5f" stroke="#2563eb" stroke-width="0.75"/>
+  <rect x="32.6" y="29.7" width="8" height="2.1" rx="1" fill="#334155" stroke="#4b5563" stroke-width="0.35"/>
+  <line x1="33.2" y1="35.5" x2="40.2" y2="35.5" stroke="#60a5fa" stroke-width="0.45" opacity="0.65"/>
+
+  <!-- Helmet / head (cleaner look) -->
+  <ellipse cx="26" cy="14.3" rx="6.9" ry="6.1" fill="#0369a1" stroke="#0284c7" stroke-width="0.95"/>
+  <path d="M19.7 12.1 Q26 10.1 32.3 12.1 Q31.8 15 26 15 Q20.2 15 19.7 12.1Z" fill="#082f49" opacity="0.74"/>
+  <ellipse cx="23.9" cy="11.8" rx="2.2" ry="1.2" fill="#bae6fd" opacity="0.27" transform="rotate(-15 23.9 11.8)"/>
+
+  <!-- Helmet badge -->
+  <circle cx="26" cy="17.4" r="2.5" fill="#ffffff" stroke="#bae6fd" stroke-width="0.45"/>
+  <text x="26" y="18.4" text-anchor="middle"
+        font-size="3.4" font-weight="700"
+        font-family="Arial, sans-serif"
+        fill="#0369a1">M</text>
+</svg>\`;
 let mechanicIcon = L.divIcon({
-  html:'<div class="mechanic-icon"></div>',
-  iconSize:[64,64],
-  iconAnchor:[32,32],
+  className:'',
+  html:svg,
+  iconSize:[46,46],
+  iconAnchor:[23,38],
+  popupAnchor:[0,-41],
 });
 
 function updateMechanics(mechanics){

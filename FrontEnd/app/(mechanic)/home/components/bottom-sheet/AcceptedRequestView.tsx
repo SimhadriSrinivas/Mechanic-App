@@ -7,6 +7,7 @@ import {
   Linking,
   Animated,
   PanResponder,
+  Platform,
 } from "react-native";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
@@ -79,21 +80,55 @@ export default function AcceptedRequestView({ request }: Props) {
     return "";
   };
 
-  const getCleanPhone = (phone: string) => {
-    if (!phone) return "";
-    let cleaned = phone.replace(/\D/g, "");
-    if (cleaned.startsWith("91") && cleaned.length > 10) {
-      cleaned = cleaned.slice(2);
+  const getCleanPhone = (phone: unknown) => {
+    if (phone === null || phone === undefined) return "";
+    let cleaned = String(phone).replace(/\D/g, "");
+
+    // Keep the last 10 digits so values with +91/country code still work.
+    if (cleaned.length > 10) {
+      cleaned = cleaned.slice(-10);
     }
+
     return cleaned;
   };
 
-  const displayPhone = getCleanPhone(request?.user_phone);
+  const rawPhone =
+    request?.user_phone ??
+    request?.userPhone ??
+    request?.phone ??
+    request?.customer_phone ??
+    request?.customerPhone ??
+    "";
 
-  const callUser = () => {
-    if (!request?.user_phone) return;
-    const cleaned = getCleanPhone(request.user_phone);
-    Linking.openURL(`tel:+91${cleaned}`);
+  const displayPhone = getCleanPhone(rawPhone);
+
+  const callUser = async () => {
+    const cleaned = getCleanPhone(rawPhone);
+    if (!cleaned) {
+      alert("Phone number is missing");
+      return;
+    }
+
+    const primaryNumber = cleaned.length === 10 ? `+91${cleaned}` : cleaned;
+    const urls =
+      Platform.OS === "ios"
+        ? [
+            `telprompt:${primaryNumber}`,
+            `tel:${primaryNumber}`,
+            `tel:${cleaned}`,
+          ]
+        : [`tel:${primaryNumber}`, `tel:${cleaned}`];
+
+    for (const url of urls) {
+      try {
+        await Linking.openURL(url);
+        return;
+      } catch {
+        // Try the next fallback URL.
+      }
+    }
+
+    alert("Unable to open phone dialer");
   };
 
   useEffect(() => {
@@ -101,29 +136,53 @@ export default function AcceptedRequestView({ request }: Props) {
   }, [request]);
 
   const loadDistanceAndAddress = async () => {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") return;
+    try {
+      const userLat = Number(request?.user_lat);
+      const userLng = Number(request?.user_lng);
 
-    const mech = await Location.getCurrentPositionAsync({});
-    const dist = calculateDistance(
-      mech.coords.latitude,
-      mech.coords.longitude,
-      request.user_lat,
-      request.user_lng,
-    );
+      if (!Number.isFinite(userLat) || !Number.isFinite(userLng)) {
+        setPickupAddress("Location unavailable");
+        return;
+      }
 
-    const d = Number(dist);
-    setDistanceKm(d);
-    setEtaMin(Math.max(1, Math.round((d / 30) * 60)));
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setPickupAddress("Location permission denied");
+        return;
+      }
 
-    const addr = await Location.reverseGeocodeAsync({
-      latitude: request.user_lat,
-      longitude: request.user_lng,
-    });
+      let mech = null;
+      try {
+        mech = await Location.getCurrentPositionAsync({});
+      } catch {
+        mech = await Location.getLastKnownPositionAsync();
+      }
 
-    if (addr.length > 0) {
-      const a = addr[0];
-      setPickupAddress(`${a.street || ""}, ${a.city || ""}`);
+      if (mech) {
+        const dist = calculateDistance(
+          mech.coords.latitude,
+          mech.coords.longitude,
+          userLat,
+          userLng,
+        );
+
+        const d = Number(dist);
+        setDistanceKm(d);
+        setEtaMin(Math.max(1, Math.round((d / 30) * 60)));
+      }
+
+      const addr = await Location.reverseGeocodeAsync({
+        latitude: userLat,
+        longitude: userLng,
+      });
+
+      if (addr.length > 0) {
+        const a = addr[0];
+        setPickupAddress(`${a.street || ""}, ${a.city || ""}`);
+      }
+    } catch (error) {
+      console.warn("AcceptedRequestView: location load failed", error);
+      setPickupAddress("Location unavailable");
     }
   };
 
@@ -158,18 +217,28 @@ export default function AcceptedRequestView({ request }: Props) {
         </Text>
       </View>
 
-      {!!displayPhone && (
-        <View style={styles.phoneCard}>
-          <View style={styles.phoneInfo}>
-            <Text style={styles.phone}>{displayPhone}</Text>
-            <Text style={styles.phoneSubText}>Call customer</Text>
-          </View>
-
-          <TouchableOpacity style={styles.callBtn} onPress={callUser}>
-            <Text style={styles.callText}>CALL</Text>
-          </TouchableOpacity>
+      <View style={styles.phoneCard}>
+        <View style={styles.phoneInfo}>
+          <Text style={styles.phone}>
+            {displayPhone || "Phone not available"}
+          </Text>
+          <Text style={styles.phoneSubText}>
+            {displayPhone ? "Call customer" : "Waiting for customer number"}
+          </Text>
         </View>
-      )}
+
+        <TouchableOpacity
+          style={[styles.callBtn, !displayPhone && styles.callBtnDisabled]}
+          onPress={callUser}
+          disabled={!displayPhone}
+        >
+          <Text
+            style={[styles.callText, !displayPhone && styles.callTextDisabled]}
+          >
+            CALL
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {(stage === "going" || stage === "ready") && (
         <View style={styles.swipeWrapper}>
@@ -259,11 +328,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f1fdf6",
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#087630",
   },
 
   phoneInfo: {
@@ -282,7 +351,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#52e88960",
   },
 
+  callBtnDisabled: {
+    borderColor: "#94a3b8",
+    backgroundColor: "#e2e8f0",
+  },
+
   callText: { color: "#087630", fontWeight: "700" },
+
+  callTextDisabled: {
+    color: "#64748b",
+  },
 
   swipeWrapper: { marginTop: 22 },
 

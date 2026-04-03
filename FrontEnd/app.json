@@ -2,7 +2,6 @@
   "expo": {
     "name": "FrontEnd",
     "slug": "FrontEnd",
-    "jsEngine": "hermes",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
