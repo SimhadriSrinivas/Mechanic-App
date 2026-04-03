@@ -13,7 +13,6 @@ import StatusCard from "./components/StatusCard";
 import { getMechanicRegStep, getLoggedInPhone } from "../../../utils/storage";
 import { DutyContext } from "../_layout";
 import { useRouter } from "expo-router";
-import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "";
 
@@ -55,15 +54,6 @@ export default function MechanicHome() {
     init();
   }, []);
 
-  /* ================= KEEP SCREEN AWAKE ================= */
-
-  useEffect(() => {
-    activateKeepAwakeAsync().catch(console.warn);
-    return () => {
-      deactivateKeepAwake().catch(console.warn);
-    };
-  }, []);
-
   /* ================= FETCH REQUESTS ================= */
 
   const fetchRequests = async () => {
@@ -72,7 +62,7 @@ export default function MechanicHome() {
     try {
       const res = await fetch(
         `${API_URL}/api/service?mechanicPhone=${mechanicPhone}`,
-        { headers: { "ngrok-skip-browser-warning": "true" } }
+        { headers: { "ngrok-skip-browser-warning": "true" } },
       );
 
       const data = await res.json();

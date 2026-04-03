@@ -1,15 +1,9 @@
 import React, { useEffect, useState } from "react";
-import {
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  Platform,
-  Linking,
-} from "react-native";
+import { Text, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 
-export default function ServiceCentersScreen() {
+export default function NearbyGaragesScreen() {
   const [loading, setLoading] = useState(true);
   const [userLoc, setUserLoc] = useState<{
     latitude: number;
@@ -56,11 +50,11 @@ export default function ServiceCentersScreen() {
     );
   }
 
-  const googleMapsUrl = `https://www.google.com/maps/search/service+center/@${userLoc.latitude},${userLoc.longitude},14z`;
+  const googleMapsUrl = `https://www.google.com/maps/search/mechanic+garage/@${userLoc.latitude},${userLoc.longitude},14z`;
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Nearby Service Centers</Text>
+      <Text style={styles.title}>Nearby Garages</Text>
 
       {/* ================= WEB ================= */}
       {Platform.OS === "web" ? (
@@ -84,12 +78,11 @@ export default function ServiceCentersScreen() {
               domStorageEnabled
               originWhitelist={["*"]}
               onShouldStartLoadWithRequest={(request: any) => {
-                if (request.url.startsWith("intent://")) {
-                  const httpsUrl = request.url.replace(
-                    /^intent:\/\//,
-                    "https://",
-                  );
-                  Linking.openURL(httpsUrl).catch(() => {});
+                if (
+                  request.url.startsWith("intent://") ||
+                  request.url.startsWith("comgooglemaps://") ||
+                  request.url.startsWith("geo:")
+                ) {
                   return false;
                 }
                 return true;

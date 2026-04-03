@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Platform,
-  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -105,20 +104,14 @@ export default function GarageMapScreen() {
                   domStorageEnabled
                   originWhitelist={["*"]}
                   onShouldStartLoadWithRequest={(request: any) => {
-                    // Android will sometimes attempt to navigate to an
-                    // "intent://" URL when Google Maps wants to open the
-                    // native app.  The emulator/device may not have the
-                    // maps application installed, which results in warnings
-                    // logged by React Native.  We can intercept these
-                    // requests and either convert them back to https or
-                    // ignore them to keep the console clean.
-                    if (request.url.startsWith("intent://")) {
-                      const httpsUrl = request.url.replace(
-                        /^intent:\/\//,
-                        "https://",
-                      );
-                      Linking.openURL(httpsUrl).catch(() => {});
-                      return false; // prevent WebView from loading it
+                    // Keep map usage inside WebView and block attempts
+                    // to open external map apps.
+                    if (
+                      request.url.startsWith("intent://") ||
+                      request.url.startsWith("geo:") ||
+                      request.url.startsWith("comgooglemaps://")
+                    ) {
+                      return false;
                     }
                     return true;
                   }}
